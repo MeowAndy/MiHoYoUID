@@ -380,9 +380,6 @@ def _draw_character_card(draw: ImageDraw.ImageDraw, char: Dict[str, Any], index:
 
 
 def _char_name(char: Dict[str, Any]) -> str:
-    name = char.get("name") or char.get("avatar_name")
-    if name and not str(name).isdigit():
-        return str(name)
     avatar_id = char.get("avatar_id") or char.get("avatarId")
     try:
         mapped = CHARACTER_ID_NAMES.get(int(avatar_id))
@@ -390,8 +387,21 @@ def _char_name(char: Dict[str, Any]) -> str:
         mapped = None
     if mapped:
         return mapped
+    name = char.get("name") or char.get("avatar_name")
+    if name and not str(name).isdigit():
+        return str(name)
     folder, data = _find_meta_by_id("meta-gs/character", str(avatar_id or ""))
     return str(data.get("name") or folder or "未知角色")
+
+
+def _char_match_text(char: Dict[str, Any]) -> str:
+    parts = [
+        _char_name(char),
+        str(char.get("name") or ""),
+        str(char.get("avatar_name") or ""),
+        str(char.get("avatar_id") or char.get("avatarId") or ""),
+    ]
+    return " ".join(x for x in parts if x).lower()
 
 
 def _char_meta(name: str) -> Dict[str, Any]:
@@ -778,19 +788,21 @@ async def render_panel_image(result: PanelResult) -> bytes:
 async def render_single_panel_image(result: PanelResult, character_query: str = "") -> bytes:
     characters = list(_iter_cards(result.characters or []))
     if character_query:
-        q = character_query.lower()
+        q = character_query.strip().lower()
         resolved = q
         try:
             from .alias_data import resolve_alias
 
-            resolved = (resolve_alias(character_query) or character_query).lower()
+            resolved = (resolve_alias(character_query) or character_query).strip().lower()
         except Exception:
             pass
         filtered = [
             c for c in characters
-            if q in str(c.get("name") or c.get("avatar_name") or c.get("avatar_id") or "").lower()
-            or resolved in str(c.get("name") or c.get("avatar_name") or c.get("avatar_id") or "").lower()
+            if q in _char_match_text(c) or resolved in _char_match_text(c)
         ]
+        if not filtered:
+            available = "、".join(_char_name(c) for c in characters[:8]) or "无角色"
+            raise ValueError(f"未在 UID {result.uid} 的公开面板中找到角色：{character_query}。当前可见角色：{available}")
         if filtered:
             characters = filtered
     if characters:
