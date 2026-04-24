@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.13.4"
+PLUGIN_VERSION = "0.13.5"
 
 CHANGELOGS = [
+    {
+        "version": "0.13.5",
+        "date": "2026-04-25",
+        "items": [
+            "按 GsCore 内置 SignMysApi 对齐原神签到实现，修复 bbs_sign_reward 返回活动已结束 retcode -212 的问题",
+            "原神签到改回 event/luna/info 与 event/luna/sign，act_id 使用 e202311201442471",
+            "签到请求改用米游社 Web DS，并补充 lang=zh-cn 与 x-rpc-signgame=hk4e",
+        ],
+    },
     {
         "version": "0.13.4",
         "date": "2026-04-25",

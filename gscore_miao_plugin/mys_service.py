@@ -15,13 +15,13 @@ from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 from gsuid_core.utils.api.mys_api import mys_api
+from gsuid_core.utils.api.mys.tools import get_web_ds_token
 from gsuid_core.utils.cookie_manager.qrlogin import get_qrcode_base64, refresh
 
 from .config import MiaoConfig
 from .const import PACKAGE_DIR
 
-GENSHIN_SIGN_ACT_ID = "e202009291139501"
-GENSHIN_SIGN_REFERER = "https://webstatic.mihoyo.com/bbs/event/signin-ys/index.html"
+GENSHIN_SIGN_ACT_ID = "e202311201442471"
 
 
 def _timeout() -> float:
@@ -93,7 +93,8 @@ def _sign_headers(cookie: str, q: str = "", b: Dict[str, Any] | None = None) -> 
     headers = _headers(cookie, q, b)
     headers.update(
         {
-            "Referer": f"{GENSHIN_SIGN_REFERER}?bbs_auth_required=true&act_id={GENSHIN_SIGN_ACT_ID}&utm_source=bbs&utm_medium=mys&utm_campaign=icon",
+            "DS": get_web_ds_token(True),
+            "Referer": "https://webstatic.mihoyo.com/",
             "Origin": "https://webstatic.mihoyo.com",
             "x-rpc-signgame": "hk4e",
         }
@@ -127,8 +128,8 @@ async def fetch_genshin_roles(cookie: str) -> List[Dict[str, Any]]:
 
 
 async def fetch_sign_info(cookie: str, uid: str) -> Dict[str, Any]:
-    url = "https://api-takumi.mihoyo.com/event/bbs_sign_reward/info"
-    params = {"act_id": GENSHIN_SIGN_ACT_ID, "region": _server_id(uid), "uid": uid}
+    url = "https://api-takumi.mihoyo.com/event/luna/info"
+    params = {"act_id": GENSHIN_SIGN_ACT_ID, "lang": "zh-cn", "region": _server_id(uid), "uid": uid}
     q = urlencode(params)
     async with httpx.AsyncClient(timeout=_timeout()) as client:
         resp = await client.get(url, params=params, headers=_sign_headers(cookie, q))
@@ -140,8 +141,8 @@ async def fetch_sign_info(cookie: str, uid: str) -> Dict[str, Any]:
 
 
 async def daily_sign(cookie: str, uid: str) -> Dict[str, Any]:
-    url = "https://api-takumi.mihoyo.com/event/bbs_sign_reward/sign"
-    body = {"act_id": GENSHIN_SIGN_ACT_ID, "region": _server_id(uid), "uid": uid}
+    url = "https://api-takumi.mihoyo.com/event/luna/sign"
+    body = {"act_id": GENSHIN_SIGN_ACT_ID, "lang": "zh-cn", "region": _server_id(uid), "uid": uid}
     async with httpx.AsyncClient(timeout=_timeout()) as client:
         resp = await client.post(url, json=body, headers=_sign_headers(cookie, "", body))
         resp.raise_for_status()
