@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.13.3"
+PLUGIN_VERSION = "0.13.4"
 
 CHANGELOGS = [
+    {
+        "version": "0.13.4",
+        "date": "2026-04-25",
+        "items": [
+            "修复原神签到误用 luna 活动接口导致返回“网络出小差了”的问题，改为 bbs_sign_reward 原神签到接口",
+            "原神签到 act_id 改为 e202009291139501，并补充 x-rpc-signgame 与原神签到页 Referer",
+            "签到失败提示现在会附带 retcode，便于继续定位 Cookie/风控/接口问题",
+        ],
+    },
     {
         "version": "0.13.3",
         "date": "2026-04-25",

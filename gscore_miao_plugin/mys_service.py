@@ -20,7 +20,8 @@ from gsuid_core.utils.cookie_manager.qrlogin import get_qrcode_base64, refresh
 from .config import MiaoConfig
 from .const import PACKAGE_DIR
 
-SIGN_ACT_ID = "e202311201442471"
+GENSHIN_SIGN_ACT_ID = "e202009291139501"
+GENSHIN_SIGN_REFERER = "https://webstatic.mihoyo.com/bbs/event/signin-ys/index.html"
 
 
 def _timeout() -> float:
@@ -88,12 +89,26 @@ def _headers(cookie: str, q: str = "", b: Dict[str, Any] | None = None) -> Dict[
     return headers
 
 
+def _sign_headers(cookie: str, q: str = "", b: Dict[str, Any] | None = None) -> Dict[str, str]:
+    headers = _headers(cookie, q, b)
+    headers.update(
+        {
+            "Referer": f"{GENSHIN_SIGN_REFERER}?bbs_auth_required=true&act_id={GENSHIN_SIGN_ACT_ID}&utm_source=bbs&utm_medium=mys&utm_campaign=icon",
+            "Origin": "https://webstatic.mihoyo.com",
+            "x-rpc-signgame": "hk4e",
+        }
+    )
+    return headers
+
+
 def _server_id(uid: str) -> str:
     return "cn_qd01" if str(uid).startswith("5") else "cn_gf01"
 
 
 def _message(raw: Dict[str, Any]) -> str:
-    return str(raw.get("message") or raw.get("msg") or raw.get("error") or "未知错误")
+    message = str(raw.get("message") or raw.get("msg") or raw.get("error") or "未知错误")
+    retcode = raw.get("retcode")
+    return f"{message}（retcode: {retcode}）" if retcode not in (None, "") else message
 
 
 async def fetch_genshin_roles(cookie: str) -> List[Dict[str, Any]]:
@@ -112,11 +127,11 @@ async def fetch_genshin_roles(cookie: str) -> List[Dict[str, Any]]:
 
 
 async def fetch_sign_info(cookie: str, uid: str) -> Dict[str, Any]:
-    url = "https://api-takumi.mihoyo.com/event/luna/info"
-    params = {"act_id": SIGN_ACT_ID, "region": _server_id(uid), "uid": uid}
+    url = "https://api-takumi.mihoyo.com/event/bbs_sign_reward/info"
+    params = {"act_id": GENSHIN_SIGN_ACT_ID, "region": _server_id(uid), "uid": uid}
     q = urlencode(params)
     async with httpx.AsyncClient(timeout=_timeout()) as client:
-        resp = await client.get(url, params=params, headers=_headers(cookie, q))
+        resp = await client.get(url, params=params, headers=_sign_headers(cookie, q))
         resp.raise_for_status()
         raw = resp.json()
     if raw.get("retcode") not in (0, "0"):
@@ -125,10 +140,10 @@ async def fetch_sign_info(cookie: str, uid: str) -> Dict[str, Any]:
 
 
 async def daily_sign(cookie: str, uid: str) -> Dict[str, Any]:
-    url = "https://api-takumi.mihoyo.com/event/luna/sign"
-    body = {"act_id": SIGN_ACT_ID, "region": _server_id(uid), "uid": uid}
+    url = "https://api-takumi.mihoyo.com/event/bbs_sign_reward/sign"
+    body = {"act_id": GENSHIN_SIGN_ACT_ID, "region": _server_id(uid), "uid": uid}
     async with httpx.AsyncClient(timeout=_timeout()) as client:
-        resp = await client.post(url, json=body, headers=_headers(cookie, "", body))
+        resp = await client.post(url, json=body, headers=_sign_headers(cookie, "", body))
         resp.raise_for_status()
         raw = resp.json()
     retcode = raw.get("retcode")
