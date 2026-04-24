@@ -18,8 +18,13 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     ),
     "EnableMiaoSetting": GsBoolConfig(
         "开启喵喵设置",
-        "开启后可用 #喵喵设置 查看与修改本插件配置",
+        "开启后可用 喵喵设置 查看与修改本插件配置",
         True,
+    ),
+    "CommandPrefix": GsStrConfig(
+        "命令显示前缀",
+        "帮助与设置文本中展示的命令前缀；实际响应前缀仍由插件 force_prefix 控制",
+        "喵喵",
     ),
     "HelpTitle": GsStrConfig(
         "帮助标题",
@@ -224,7 +229,7 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     ),
     "MaxCommaGroup": GsIntConfig(
         "数字分组最大值",
-        "#喵喵设置逗号 的最大允许值",
+        "喵喵设置逗号 的最大允许值",
         8,
         max_value=12,
     ),

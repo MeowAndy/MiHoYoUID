@@ -27,6 +27,10 @@ def _schema_desc() -> str:
     return "|".join(cfg)
 
 
+def _cmd_prefix() -> str:
+    return str(MiaoConfig.get_config("CommandPrefix").data or "喵喵").strip() or "喵喵"
+
+
 def _normalize_key(raw: str) -> str:
     raw = (raw or "").strip()
     alias = {
@@ -53,6 +57,7 @@ async def miao_setting(bot: Bot, ev: Event):
 
     if not key:
         user_cfg = merge_user_cfg(await get_user_cfg(ev.user_id, ev.bot_id))
+        prefix = _cmd_prefix()
         panel_server = user_cfg.get("panel_server", "auto")
         uid = user_cfg.get("uid") or "未绑定"
         custom_splash = user_cfg.get("custom_splash", True)
@@ -68,15 +73,15 @@ async def miao_setting(bot: Bot, ev: Event):
             f"星级显示: {'开启' if show_star else '关闭'}\n"
             f"数字分组: {comma_group}\n\n"
             "可用：\n"
-            f"喵喵设置面板服务 <{_schema_desc()}>\n"
-            "喵喵设置uid <UID>\n"
-            "喵喵设置面板图 <开启|关闭>\n"
-            "喵喵设置组队 <开启|关闭>\n"
-            "喵喵设置星级 <开启|关闭>\n"
-            "喵喵设置逗号 <2-8>\n"
-            "喵喵设置历史\n"
-            "喵喵设置导出\n"
-            "喵喵设置重置"
+            f"{prefix}设置面板服务 <{_schema_desc()}>\n"
+            f"{prefix}设置uid <UID>\n"
+            f"{prefix}设置面板图 <开启|关闭>\n"
+            f"{prefix}设置组队 <开启|关闭>\n"
+            f"{prefix}设置星级 <开启|关闭>\n"
+            f"{prefix}设置逗号 <2-8>\n"
+            f"{prefix}设置历史\n"
+            f"{prefix}设置导出\n"
+            f"{prefix}设置重置"
         )
 
     if key == "历史":
@@ -115,10 +120,11 @@ async def miao_setting(bot: Bot, ev: Event):
             await add_history(ev, "UID解绑", "ok")
             return await bot.send("已解绑 UID")
         if not value.isdigit() or len(value) not in {9, 10}:
-            return await bot.send("请填写正确 UID，例如：喵喵设置uid 100000001")
+            return await bot.send(f"请填写正确 UID，例如：{_cmd_prefix()}设置uid 100000001")
         await bind_uid(ev.user_id, ev.bot_id, value)
         await add_history(ev, "UID绑定", value)
-        return await bot.send(f"已绑定 UID：{value}\n之后可直接使用：喵喵面板 / 喵喵雷神面板")
+        prefix = _cmd_prefix()
+        return await bot.send(f"已绑定 UID：{value}\n之后可直接使用：{prefix}面板 / {prefix}雷神面板")
 
     if key == "面板图":
         b = _normalize_bool(value)
@@ -148,7 +154,7 @@ async def miao_setting(bot: Bot, ev: Event):
         try:
             n = int(value)
         except Exception:
-            return await bot.send("请填写数字，例如：喵喵设置逗号 3")
+            return await bot.send(f"请填写数字，例如：{_cmd_prefix()}设置逗号 3")
         max_group = int(MiaoConfig.get_config("MaxCommaGroup").data)
         if n < 2 or n > max_group:
             return await bot.send(f"数字分组范围应为 2-{max_group}")
@@ -156,4 +162,4 @@ async def miao_setting(bot: Bot, ev: Event):
         await add_history(ev, "数字分组", str(n))
         return await bot.send(f"已设置数字分组为：{n}")
 
-    await bot.send("暂不支持该设置项，请发送 #喵喵设置 查看帮助")
+    await bot.send(f"暂不支持该设置项，请发送 {_cmd_prefix()}设置 查看帮助")
