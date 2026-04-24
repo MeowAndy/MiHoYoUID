@@ -147,6 +147,7 @@ def _weapon_from_avatar(avatar: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(weapon, dict):
         return {}
     return {
+        "item_id": weapon.get("item_id") or weapon.get("itemId") or weapon.get("id"),
         "name": weapon.get("name") or weapon.get("weapon_name") or weapon.get("weaponName"),
         "level": weapon.get("level") or weapon.get("lv"),
         "promote_level": weapon.get("promote") or weapon.get("promote_level"),
@@ -169,6 +170,7 @@ def _reliquaries_from_avatar(avatar: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         reliqs.append(
             {
+                "item_id": item.get("item_id") or item.get("itemId") or item.get("id"),
                 "name": item.get("name"),
                 "set_name": item.get("set") or item.get("set_name") or item.get("setName"),
                 "pos": item.get("pos") or item.get("idx") or item.get("equipType"),
@@ -303,6 +305,7 @@ def _enka_weapon(equip_list: List[Dict[str, Any]]) -> Dict[str, Any]:
             weapon = equip.get("weapon") or {}
             refine_values = list((weapon.get("affixMap") or {}).values())
             return {
+                "item_id": weapon.get("itemId"),
                 "name": flat.get("nameTextMapHash") or str(weapon.get("itemId") or "未知武器"),
                 "level": weapon.get("level"),
                 "promote_level": weapon.get("promoteLevel"),
@@ -321,6 +324,7 @@ def _enka_reliquaries(equip_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         flat = equip.get("flat") or {}
         reliquaries.append(
             {
+                "item_id": equip.get("itemId"),
                 "name": flat.get("nameTextMapHash") or str(equip.get("itemId") or "未知圣遗物"),
                 "set_name": flat.get("setNameTextMapHash"),
                 "pos": flat.get("equipType"),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -231,6 +232,44 @@ def _load_json(path: Path | None) -> Dict[str, Any]:
         return {}
 
 
+@lru_cache(maxsize=4096)
+def _find_meta_by_id(base: str, item_id: str) -> Tuple[str, Dict[str, Any]]:
+    if not item_id:
+        return "", {}
+    root = _miao_root()
+    if not root:
+        return "", {}
+    root_dir = root / "resources" / Path(base)
+    if not root_dir.exists():
+        return "", {}
+    target = str(item_id)
+    for data_file in root_dir.rglob("data.json"):
+        data = _load_json(data_file)
+        if str(data.get("id") or "") == target:
+            return data_file.parent.name, data
+    return "", {}
+
+
+@lru_cache(maxsize=4096)
+def _find_artifact_by_item_id(item_id: str) -> Dict[str, Any]:
+    data = _load_json(_resource_path("meta-gs", "artifact", "data.json"))
+    target = str(item_id or "")
+    if not target:
+        return {}
+    for art in data.values():
+        if not isinstance(art, dict):
+            continue
+        idxs = art.get("idxs") or {}
+        for idx, item in idxs.items():
+            if isinstance(item, dict) and str(item.get("id") or "") == target:
+                return {
+                    "set_name": str(art.get("name") or ""),
+                    "name": str(item.get("name") or ""),
+                    "idx": int(idx) if str(idx).isdigit() else 0,
+                }
+    return {}
+
+
 def _rounded(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], fill: Color, outline: Color | None = None) -> None:
     draw.rounded_rectangle(box, radius=28, fill=fill, outline=outline, width=2 if outline else 1)
 
@@ -342,14 +381,17 @@ def _draw_character_card(draw: ImageDraw.ImageDraw, char: Dict[str, Any], index:
 
 def _char_name(char: Dict[str, Any]) -> str:
     name = char.get("name") or char.get("avatar_name")
-    if name:
+    if name and not str(name).isdigit():
         return str(name)
     avatar_id = char.get("avatar_id") or char.get("avatarId")
     try:
         mapped = CHARACTER_ID_NAMES.get(int(avatar_id))
     except (TypeError, ValueError):
         mapped = None
-    return mapped or "未知角色"
+    if mapped:
+        return mapped
+    folder, data = _find_meta_by_id("meta-gs/character", str(avatar_id or ""))
+    return str(data.get("name") or folder or "未知角色")
 
 
 def _char_meta(name: str) -> Dict[str, Any]:
@@ -383,14 +425,35 @@ def _find_named_resource(base: str, name: str, filename: str) -> Path | None:
     return None
 
 
-def _weapon_icon(name: str) -> Path | None:
-    return _find_named_resource("meta-gs/weapon", name, "icon.webp")
+def _weapon_meta(weapon: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    item_id = str(weapon.get("item_id") or weapon.get("itemId") or weapon.get("id") or "")
+    return _find_meta_by_id("meta-gs/weapon", item_id)
+
+
+def _weapon_name(weapon: Dict[str, Any]) -> str:
+    name = _display_name(weapon.get("name"), "")
+    if name:
+        return name
+    folder, data = _weapon_meta(weapon)
+    return str(data.get("name") or folder or "未知武器")
+
+
+def _weapon_icon(weapon: Dict[str, Any]) -> Path | None:
+    name = _weapon_name(weapon)
+    path = _find_named_resource("meta-gs/weapon", name, "icon.webp")
+    if path:
+        return path
+    folder, _ = _weapon_meta(weapon)
+    return _find_named_resource("meta-gs/weapon", folder, "icon.webp")
 
 
 def _artifact_set_name(rel: Dict[str, Any]) -> str:
     set_name = _display_name(rel.get("set_name"), "")
     if set_name:
         return set_name
+    by_id = _find_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or ""))
+    if by_id.get("set_name"):
+        return str(by_id["set_name"])
     name = _display_name(rel.get("name"), "")
     data = _load_json(_resource_path("meta-gs", "artifact", "data.json"))
     for item in data.values():
@@ -406,6 +469,9 @@ def _artifact_pos_index(rel: Dict[str, Any], fallback_idx: int) -> int:
     pos = rel.get("pos")
     if pos in ARTIFACT_SLOT_INDEX:
         return ARTIFACT_SLOT_INDEX[pos]
+    by_id = _find_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or ""))
+    if by_id.get("idx"):
+        return int(by_id["idx"])
     try:
         num = int(pos)
         if 1 <= num <= 5:
@@ -432,6 +498,14 @@ def _display_name(value: Any, fallback: str) -> str:
     if not text or text.isdigit():
         return fallback
     return text
+
+
+def _artifact_name(rel: Dict[str, Any], fallback: str) -> str:
+    name = _display_name(rel.get("name"), "")
+    if name:
+        return name
+    by_id = _find_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or ""))
+    return str(by_id.get("name") or fallback)
 
 
 def _prop_name(value: Any) -> str:
@@ -594,9 +668,9 @@ def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict
     rarity = int(weapon.get("rarity") or 5)
     y = _draw_section_title(draw, y, "武器")
     _rounded_r(draw, (25, y, 575, y + 112), 12, (38, 37, 42), (92, 81, 62), 1)
-    name = _display_name(weapon.get("name"), "未知武器")
+    name = _weapon_name(weapon)
     draw.rounded_rectangle((42, y + 18, 118, y + 94), radius=12, fill=_star_color(rarity))
-    icon = _open_image(_weapon_icon(name), (72, 72), contain=True)
+    icon = _open_image(_weapon_icon(weapon), (72, 72), contain=True)
     if icon:
         _paste(img, icon, (44, y + 20))
     else:
@@ -630,7 +704,7 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
             _paste(img, icon, (x + 12, yy + 12))
         else:
             _text(draw, (x + 24, yy + 23), ARTIFACT_SLOT_ICONS[idx], (255, 247, 230), FONT_SMALL)
-        title = _display_name(rel.get("name"), _reliq_label(idx))
+        title = _artifact_name(rel, _reliq_label(idx))
         _text(draw, (x + 70, yy + 14), _fit_text(title, 6), (245, 228, 183), FONT_SMALL)
         main = _prop_name(rel.get("main_prop") or rel.get("main"))
         _text(draw, (x + 14, yy + 68), main, (210, 210, 210), FONT_TINY)
