@@ -1,6 +1,13 @@
-PLUGIN_VERSION = "0.13.7"
+PLUGIN_VERSION = "0.13.8"
 
 CHANGELOGS = [
+    {
+        "version": "0.13.8",
+        "date": "2026-04-25",
+        "items": [
+            "优化原神签到结果文本，UID、状态、累计签到和日期字段增加 emoji 装饰",
+        ],
+    },
     {
         "version": "0.13.7",
         "date": "2026-04-25",

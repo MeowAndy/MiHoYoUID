@@ -118,4 +118,10 @@ async def send_daily_sign(bot: Bot, ev: Event):
     total = after.get("total_sign_day") or before.get("total_sign_day") or "?"
     today = after.get("today") or before.get("today") or ""
     status = "今日已签到" if signed or raw.get("retcode") == -5003 else "签到成功"
-    await bot.send(f"【喵喵原神签到】\nUID：{uid}\n状态：{status}\n累计签到：{total} 天\n日期：{today}")
+    await bot.send(
+        "【喵喵原神签到】\n"
+        f"🆔 UID：{uid}\n"
+        f"✅ 状态：{status}\n"
+        f"📅 累计签到：{total} 天\n"
+        f"🕒 日期：{today}"
+    )
