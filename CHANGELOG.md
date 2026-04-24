@@ -2,6 +2,16 @@
 
 All notable changes to `gscore_miao-plugin` are documented in this file.
 
+## [0.11.0] - 2026-04-25
+
+### Added
+- 圣遗物评分读取本地 Yunzai `miao-plugin/resources/meta-gs/artifact/artis-mark.js` 中的 `usefulAttr` 角色权重。
+- 增加雷电将军、绝缘4、西风武器、薙草高精等常见动态评分规则。
+- 评分档位对齐 miao-plugin 风格的 `MAX/ACE/SSS/SS/S/A/B/C`。
+
+### Changed
+- `喵喵圣遗物评分` 输出会显示当前使用的评分规则，未知角色才回退通用权重。
+
 ## [0.10.0] - 2026-04-25
 
 ### Added

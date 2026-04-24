@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.10.0"
+PLUGIN_VERSION = "0.11.0"
 
 CHANGELOGS = [
+    {
+        "version": "0.11.0",
+        "date": "2026-04-25",
+        "items": [
+            "迁移 Yunzai miao-plugin 的 resources/meta-gs/artifact/artis-mark.js 常用角色圣遗物评分权重",
+            "圣遗物评分增加角色专属权重、绝缘4、西风武器、薙草高精等常见动态规则",
+            "评分输出改为显示使用规则，并按 miao-plugin 风格 MAX/ACE/SSS/SS/S/A/B/C 档位划分",
+        ],
+    },
     {
         "version": "0.10.0",
         "date": "2026-04-25",
