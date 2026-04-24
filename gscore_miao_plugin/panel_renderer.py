@@ -727,6 +727,48 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
     return y + 292
 
 
+def _draw_artifact_detail(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
+    from .artifact_service import (_weight_for_char, artifact_rank,
+                                   character_artifact_score, score_reliquary)
+
+    title, weight = _weight_for_char(char)
+    reliqs = [r for r in (char.get("reliquaries") or []) if isinstance(r, dict)][:5]
+    total, scores, _ = character_artifact_score(char)
+    y = _draw_section_title(draw, y, "圣遗物评分详情", f"{total} 分 [{artifact_rank(total)}]")
+    _text(draw, (38, y), f"评分规则：{title}", (210, 200, 176), FONT_TINY)
+    y += 26
+    for idx in range(5):
+        rel = reliqs[idx] if idx < len(reliqs) else {}
+        score = scores[idx] if idx < len(scores) else (score_reliquary(rel, weight) if rel else 0)
+        x, h = 25, 112
+        _rounded_r(draw, (x, y, 575, y + h), 12, (42, 39, 42), _star_color(int(rel.get("rarity") or 5)), 1)
+        icon = _open_image(_artifact_icon(rel, idx), (66, 66), contain=True)
+        draw.rounded_rectangle((x + 14, y + 20, x + 80, y + 86), radius=12, fill=_star_color(int(rel.get("rarity") or 5)))
+        if icon:
+            _paste(img, icon, (x + 14, y + 20))
+        else:
+            _text(draw, (x + 35, y + 39), ARTIFACT_SLOT_ICONS[idx], (255, 247, 230), FONT_TEXT)
+        name = _artifact_name(rel, _reliq_label(idx))
+        main = _prop_name(rel.get("main_prop") or rel.get("main"))
+        level = _artifact_level(rel.get("level"))
+        _text(draw, (x + 96, y + 16), _fit_text(name, 15), (245, 228, 183), FONT_SMALL)
+        _text(draw, (x + 96, y + 44), f"{_reliq_label(idx)}  +{level}  主词条：{main}", (218, 218, 218), FONT_TINY)
+        subs = []
+        for prop in rel.get("sub_props") or []:
+            if isinstance(prop, dict):
+                prop_name = _prop_name(prop.get("appendPropId") or prop.get("prop_id") or prop.get("key"))
+                prop_value = prop.get("value") or prop.get("val") or ""
+                subs.append(f"{prop_name}{prop_value}")
+            else:
+                subs.append(_prop_name(prop))
+        _text(draw, (x + 96, y + 72), _fit_text(" / ".join(subs) or "无副词条", 34), (188, 196, 210), FONT_TINY)
+        _rounded_r(draw, (x + 462, y + 22, x + 532, y + 62), 10, (80, 62, 36), (221, 191, 135), 1)
+        _text(draw, (x + 472, y + 30), f"{score:.1f}", (255, 232, 170), FONT_TEXT)
+        _text(draw, (x + 468, y + 70), artifact_rank(score), (144, 232, 74), FONT_TINY)
+        y += h + 12
+    return y
+
+
 def _draw_miao_profile(img: Image.Image, draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any], width: int, height: int) -> None:
     _draw_miao_header(img, draw, result, char, width)
     y = _draw_basic_panel(img, draw, result, char)
@@ -822,3 +864,61 @@ async def render_single_panel_image(result: PanelResult, character_query: str = 
             characters=characters[:1],
         )
     return await render_panel_image(result)
+
+
+async def render_artifact_image(result: PanelResult, character_query: str = "") -> bytes:
+    characters = list(_iter_cards(result.characters or []))
+    if character_query:
+        q = character_query.strip().lower()
+        try:
+            from .alias_data import resolve_alias
+
+            resolved = (resolve_alias(character_query) or character_query).strip().lower()
+        except Exception:
+            resolved = q
+        characters = [c for c in characters if q in _char_match_text(c) or resolved in _char_match_text(c)]
+        if not characters:
+            available = "、".join(_char_name(c) for c in list(_iter_cards(result.characters or []))[:8]) or "无角色"
+            raise ValueError(f"未在 UID {result.uid} 的公开面板中找到角色：{character_query}。当前可见角色：{available}")
+    if not characters:
+        raise ValueError("当前数据源没有返回可渲染的角色详情")
+    char = characters[0]
+    width = 600
+    height = 1220
+    img = Image.new("RGBA", (width, height), (22, 23, 27, 255))
+    draw = ImageDraw.Draw(img)
+    _draw_miao_header(img, draw, result, char, width)
+    y = _draw_basic_panel(img, draw, result, char)
+    y = _draw_artifact_detail(img, draw, y, char)
+    _text(draw, (30, height - 38), "Created by gscore_miao-plugin · artifact detail inspired by miao-plugin", (150, 145, 132), FONT_TINY)
+    return await convert_img(img)
+
+
+async def render_artifact_list_image(result: PanelResult) -> bytes:
+    from .artifact_service import artifact_rank, character_artifact_score
+
+    chars = list(_iter_cards(result.characters or []))
+    rows = []
+    for char in chars:
+        total, scores, title = character_artifact_score(char)
+        rows.append((total, char, scores, title))
+    rows.sort(key=lambda x: x[0], reverse=True)
+    width = 900
+    height = 170 + max(1, len(rows[:16])) * 74 + 80
+    img = _gradient_bg(width, height).convert("RGBA")
+    draw = ImageDraw.Draw(img)
+    _text(draw, (52, 42), "喵喵圣遗物列表", (255, 247, 220), FONT_TITLE)
+    _text(draw, (56, 100), f"UID {result.uid} · 数据源 {result.source} · 按总评分排序", (199, 210, 230), FONT_SMALL)
+    if not rows:
+        _rounded_r(draw, (52, 160, width - 52, 280), 14, (31, 39, 61), (70, 83, 120), 1)
+        _text(draw, (82, 200), "当前数据源没有返回圣遗物详情。", (248, 244, 232), FONT_TEXT)
+    for idx, (total, char, scores, title) in enumerate(rows[:16], start=1):
+        y = 160 + (idx - 1) * 74
+        _rounded_r(draw, (52, y, width - 52, y + 60), 12, (31, 39, 61), (70, 83, 120), 1)
+        _text(draw, (72, y + 16), f"{idx}", (255, 232, 170), FONT_TEXT)
+        _text(draw, (120, y + 12), _char_name(char), (248, 244, 232), FONT_TEXT)
+        _text(draw, (300, y + 14), " / ".join(f"{x:.1f}" for x in scores[:5]) or "无圣遗物", (190, 201, 221), FONT_TINY)
+        _text(draw, (650, y + 12), f"{total:.1f} [{artifact_rank(total)}]", (144, 232, 74), FONT_TEXT)
+        _text(draw, (120, y + 38), _fit_text(title, 28), (160, 171, 190), FONT_TINY)
+    _text(draw, (54, height - 42), "评分权重读取本地 miao-plugin resources/meta-gs/artifact/artis-mark.js", (145, 158, 186), FONT_TINY)
+    return await convert_img(img)
