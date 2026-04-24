@@ -2,6 +2,13 @@
 
 All notable changes to `gscore_miao-plugin` are documented in this file.
 
+## [0.8.1] - 2026-04-25
+
+### Changed
+- 重做单角色面板图为 600px 竖版布局，更接近 Yunzai `miao-plugin` 的 `profile-detail` 结构。
+- 面板图新增大立绘占位、角色基础信息、属性、天赋、命座、武器和圣遗物分区。
+- 当前仍使用纯 Pillow 渲染，后续继续接入原版资源、角色立绘与 HTML/CSS 模板。
+
 ## [0.8.0] - 2026-04-25
 
 ### Added

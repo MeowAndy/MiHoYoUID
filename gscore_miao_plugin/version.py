@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.8.0"
+PLUGIN_VERSION = "0.8.1"
 
 CHANGELOGS = [
+    {
+        "version": "0.8.1",
+        "date": "2026-04-25",
+        "items": [
+            "重做单角色面板图为更接近 Yunzai miao-plugin 的竖版布局",
+            "面板图新增大立绘占位、角色基础信息、属性、天赋、命座、武器与圣遗物分区",
+            "保留无素材环境下的纯 Pillow 渲染，后续继续接入原版资源与 HTML/CSS 模板",
+        ],
+    },
     {
         "version": "0.8.0",
         "date": "2026-04-25",

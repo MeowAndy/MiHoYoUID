@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from gsuid_core.utils.image.convert import convert_img
 from PIL import Image, ImageDraw, ImageFont
@@ -25,11 +25,12 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.I
     return ImageFont.load_default()
 
 
-FONT_TITLE = _font(48, True)
-FONT_SUBTITLE = _font(24)
-FONT_CARD_TITLE = _font(28, True)
-FONT_TEXT = _font(22)
-FONT_SMALL = _font(18)
+FONT_TITLE = _font(42, True)
+FONT_SUBTITLE = _font(22)
+FONT_CARD_TITLE = _font(26, True)
+FONT_TEXT = _font(20)
+FONT_SMALL = _font(16)
+FONT_TINY = _font(14)
 
 
 def _text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill: Color, font: ImageFont.ImageFont) -> None:
@@ -38,6 +39,10 @@ def _text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill: Color
 
 def _rounded(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], fill: Color, outline: Color | None = None) -> None:
     draw.rounded_rectangle(box, radius=28, fill=fill, outline=outline, width=2 if outline else 1)
+
+
+def _rounded_r(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], radius: int, fill: Color, outline: Color | None = None, width: int = 1) -> None:
+    draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
 
 
 def _gradient_bg(width: int, height: int) -> Image.Image:
@@ -58,6 +63,24 @@ def _safe(value: Any, default: str = "-") -> str:
     if value is None or value == "":
         return default
     return str(value)
+
+
+def _num(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _fmt(value: Any, suffix: str = "") -> str:
+    if value is None or value == "":
+        return "-"
+    number = _num(value, None)  # type: ignore[arg-type]
+    if number is None:
+        return str(value)
+    if abs(number - round(number)) < 0.01:
+        return f"{round(number)}{suffix}"
+    return f"{number:.1f}{suffix}"
 
 
 def _stat_line(label: str, value: Any) -> str:
@@ -123,8 +146,185 @@ def _draw_character_card(draw: ImageDraw.ImageDraw, char: Dict[str, Any], index:
         _text(draw, (col_x, row_y), line, (220, 226, 238), FONT_TEXT)
 
 
+def _char_name(char: Dict[str, Any]) -> str:
+    return str(char.get("name") or char.get("avatar_name") or f"角色ID {char.get('avatar_id') or '?'}")
+
+
+def _star_color(rarity: int) -> Color:
+    if rarity >= 5:
+        return (211, 160, 85)
+    if rarity == 4:
+        return (139, 105, 190)
+    return (82, 128, 166)
+
+
+def _element_color(name: str) -> Color:
+    text = name or ""
+    if any(x in text for x in ["雷电", "雷神", "八重", "刻晴", "赛诺", "克洛琳德"]):
+        return (116, 83, 184)
+    if any(x in text for x in ["胡桃", "宵宫", "香菱", "可莉", "迪卢克", "班尼特", "玛薇卡", "仆人"]):
+        return (170, 69, 56)
+    if any(x in text for x in ["夜兰", "行秋", "芙宁娜", "心海", "那维莱特", "妮露"]):
+        return (55, 123, 181)
+    if any(x in text for x in ["纳西妲", "艾尔海森", "提纳里", "瑶瑶", "白术"]):
+        return (88, 142, 76)
+    if any(x in text for x in ["钟离", "岩", "娜维娅", "一斗", "凝光", "阿贝多"]):
+        return (176, 132, 62)
+    if any(x in text for x in ["甘雨", "绫华", "优菈", "申鹤", "莱欧斯利"]):
+        return (76, 147, 177)
+    if any(x in text for x in ["温迪", "万叶", "魈", "流浪者", "闲云"]):
+        return (72, 151, 134)
+    return (95, 113, 150)
+
+
+def _draw_miao_header(draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any], width: int) -> None:
+    name = _char_name(char)
+    elem = _element_color(name)
+    draw.rectangle((0, 0, width, 520), fill=(34, 34, 38))
+    draw.rectangle((0, 0, width, 520), fill=(*elem, 80))
+    draw.ellipse((-260, -180, 420, 500), fill=(*elem, 95))
+    draw.ellipse((260, -260, 900, 420), fill=(255, 255, 255, 22))
+    draw.polygon([(0, 500), (width, 410), (width, 560), (0, 560)], fill=(22, 23, 27))
+
+    # 大立绘占位：没有原版素材时，用剪影与角色首字模拟 miao-plugin 的大图区域。
+    draw.ellipse((112, 54, 488, 430), fill=(255, 255, 255, 35), outline=(255, 255, 255, 80), width=3)
+    draw.ellipse((190, 88, 410, 308), fill=(255, 255, 255, 48))
+    draw.rounded_rectangle((154, 278, 446, 572), radius=145, fill=(255, 255, 255, 42))
+    first = name[:1] if name else "?"
+    _text(draw, (262, 165), first, (255, 246, 220), _font(120, True))
+
+    _rounded_r(draw, (18, 22, 160, 54), 10, (0, 0, 0, 90))
+    _text(draw, (30, 27), f"UID {result.uid}", (235, 230, 216), FONT_TINY)
+    src = f"数据源：{result.source}"
+    _rounded_r(draw, (width - 170, 22, width - 18, 54), 10, (0, 0, 0, 90))
+    _text(draw, (width - 158, 27), src[:12], (235, 230, 216), FONT_TINY)
+
+
+def _draw_basic_panel(draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any]) -> int:
+    x, y, w, h = 25, 392, 550, 178
+    _rounded_r(draw, (x, y, x + w, y + h), 14, (31, 30, 34), (221, 191, 135), 2)
+    name = _char_name(char)
+    cons = char.get("constellation")
+    level = _safe(char.get("level"), "?")
+    _text(draw, (x + 20, y + 16), name, (245, 228, 183), FONT_TITLE)
+    _text(draw, (x + 22, y + 68), f"UID {result.uid} - Lv.{level}", (232, 232, 232), FONT_TEXT)
+    if cons is not None:
+        _rounded_r(draw, (x + 300, y + 68, x + 360, y + 96), 8, (150, 48, 42))
+        _text(draw, (x + 315, y + 72), f"{cons}命", (255, 245, 225), FONT_SMALL)
+
+    skills = list(char.get("skill_levels") or [])[:3]
+    labels = ["普攻", "战技", "爆发"]
+    for idx, label in enumerate(labels):
+        lv = skills[idx] if idx < len(skills) else "-"
+        cx = x + 28 + idx * 82
+        cy = y + 113
+        draw.ellipse((cx, cy, cx + 52, cy + 52), fill=(42, 43, 48), outline=(214, 183, 112), width=2)
+        _text(draw, (cx + 19, cy + 13), lv, (255, 245, 220), FONT_TEXT)
+        _text(draw, (cx + 8, cy + 56), label, (202, 195, 180), FONT_TINY)
+
+    for idx in range(6):
+        cx = x + 326 + idx * 33
+        cy = y + 122
+        fill = (221, 191, 135) if cons is not None and idx < int(cons) else (75, 75, 78)
+        draw.ellipse((cx, cy, cx + 24, cy + 24), fill=fill, outline=(245, 230, 190), width=1)
+    return y + h + 16
+
+
+def _draw_section_title(draw: ImageDraw.ImageDraw, y: int, title: str, right: str = "") -> int:
+    _rounded_r(draw, (25, y, 575, y + 44), 8, (37, 37, 41), (72, 66, 55), 1)
+    _text(draw, (45, y + 10), title, (211, 188, 142), FONT_TEXT)
+    if right:
+        _text(draw, (385, y + 12), right, (160, 160, 160), FONT_TINY)
+    return y + 54
+
+
+def _draw_attrs(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
+    props = char.get("fight_props") or {}
+    attrs = [
+        ("生命值", props.get("生命值") or props.get("HP")),
+        ("攻击力", props.get("攻击力")),
+        ("防御力", props.get("防御力")),
+        ("元素精通", props.get("元素精通")),
+        ("暴击率", _fmt(props.get("暴击率"), "%")),
+        ("暴击伤害", _fmt(props.get("暴击伤害"), "%")),
+        ("元素充能", _fmt(props.get("充能效率"), "%")),
+        ("伤害加成", _fmt(props.get("元素伤害加成") or props.get("伤害加成"), "%")),
+    ]
+    y = _draw_section_title(draw, y, "角色属性")
+    row_h = 38
+    for idx, (label, value) in enumerate(attrs):
+        row = idx // 2
+        col = idx % 2
+        x = 25 + col * 275
+        yy = y + row * row_h
+        fill = (42, 42, 46) if row % 2 == 0 else (35, 35, 39)
+        draw.rectangle((x, yy, x + 275, yy + row_h), fill=fill)
+        _text(draw, (x + 16, yy + 8), label, (210, 210, 210), FONT_SMALL)
+        _text(draw, (x + 152, yy + 8), _safe(value), (144, 232, 74), FONT_SMALL)
+    return y + 4 * row_h + 16
+
+
+def _draw_weapon(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
+    weapon = char.get("weapon") or {}
+    if not isinstance(weapon, dict):
+        weapon = {}
+    rarity = int(weapon.get("rarity") or 5)
+    y = _draw_section_title(draw, y, "武器")
+    _rounded_r(draw, (25, y, 575, y + 112), 12, (38, 37, 42), (92, 81, 62), 1)
+    draw.rounded_rectangle((42, y + 18, 118, y + 94), radius=12, fill=_star_color(rarity))
+    _text(draw, (66, y + 40), "武", (255, 247, 230), FONT_CARD_TITLE)
+    name = weapon.get("name") or "未知武器"
+    _text(draw, (134, y + 18), name, (245, 228, 183), FONT_CARD_TITLE)
+    _text(draw, (136, y + 58), f"Lv.{_safe(weapon.get('level'), '?')}  {'★' * min(rarity, 5)}", (226, 226, 226), FONT_SMALL)
+    return y + 128
+
+
+def _reliq_label(index: int) -> str:
+    return ["生之花", "死之羽", "时之沙", "空之杯", "理之冠"][index] if index < 5 else "圣遗物"
+
+
+def _draw_artifacts(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
+    reliqs = [r for r in (char.get("reliquaries") or []) if isinstance(r, dict)][:5]
+    y = _draw_section_title(draw, y, "圣遗物", f"{len(reliqs)}/5")
+    card_w, card_h = 176, 128
+    for idx in range(5):
+        col = idx % 3
+        row = idx // 3
+        x = 25 + col * 187
+        yy = y + row * 140
+        rel = reliqs[idx] if idx < len(reliqs) else {}
+        level = rel.get("level") or 0
+        rarity = int(rel.get("rarity") or 5)
+        _rounded_r(draw, (x, yy, x + card_w, yy + card_h), 12, (42, 39, 42), _star_color(rarity), 1)
+        draw.rounded_rectangle((x + 12, yy + 12, x + 58, yy + 58), radius=10, fill=_star_color(rarity))
+        _text(draw, (x + 24, yy + 23), str(idx + 1), (255, 247, 230), FONT_SMALL)
+        _text(draw, (x + 70, yy + 14), _reliq_label(idx), (245, 228, 183), FONT_SMALL)
+        main = str(rel.get("main_prop") or "主词条")
+        main = main.replace("FIGHT_PROP_", "").replace("_", " ")[:16]
+        _text(draw, (x + 14, yy + 68), main, (210, 210, 210), FONT_TINY)
+        _text(draw, (x + 14, yy + 94), f"+{level if level else '-'}  {'★' * min(rarity, 5)}", (144, 232, 74), FONT_TINY)
+    return y + 292
+
+
+def _draw_miao_profile(draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any], width: int, height: int) -> None:
+    _draw_miao_header(draw, result, char, width)
+    y = _draw_basic_panel(draw, result, char)
+    y = _draw_attrs(draw, y, char)
+    y = _draw_weapon(draw, y, char)
+    y = _draw_artifacts(draw, y, char)
+    _text(draw, (30, height - 38), "Created by gscore_miao-plugin · layout inspired by miao-plugin", (150, 145, 132), FONT_TINY)
+
+
 async def render_panel_image(result: PanelResult) -> bytes:
     characters = list(_iter_cards((result.characters or [])[:8]))
+    if len(characters) == 1:
+        width = 600
+        height = 1180
+        img = Image.new("RGBA", (width, height), (22, 23, 27, 255))
+        draw = ImageDraw.Draw(img)
+        _draw_miao_profile(draw, result, characters[0], width, height)
+        return await convert_img(img)
+
     card_count = max(len(characters), 1)
     cols = 2
     rows = (card_count + cols - 1) // cols
