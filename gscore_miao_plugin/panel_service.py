@@ -66,8 +66,6 @@ def render_panel_text(result: PanelResult) -> str:
         lines.append(f"签名：{result.signature}")
     lines.append(f"公开角色数：{_avatar_count(result)}")
     lines.extend(_render_characters(result))
-    lines.append("")
-    lines.append("如需图片面板，请在 WebUI 将 PanelRenderMode 设为 image，并开启 喵喵设置面板图。")
     return "\n".join(lines)
 
 

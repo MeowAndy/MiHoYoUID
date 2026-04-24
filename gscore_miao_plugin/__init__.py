@@ -3,6 +3,9 @@
 from gsuid_core.sv import Plugins
 
 from .const import PLUGIN_NAME
+from .startup import ensure_image_panel_defaults
+
+ensure_image_panel_defaults()
 
 Plugins(
     name=PLUGIN_NAME,
