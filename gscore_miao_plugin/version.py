@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.14.1"
+PLUGIN_VERSION = "0.14.2"
 
 CHANGELOGS = [
+    {
+        "version": "0.14.2",
+        "date": "2026-04-25",
+        "items": [
+            "修复单角色面板普攻图标固定使用单手剑的问题，改为按 miao-plugin 角色 data.json 的 weapon 类型选择普攻图标",
+            "单角色面板命座改为优先使用 miao-plugin 本地 cons-1 到 cons-6 素材，避免纯圆点显示",
+            "Enka 武器数值不再丢失，面板图会展示基础攻击与副属性；圣遗物区补充总分、评级和评分规则",
+        ],
+    },
     {
         "version": "0.14.1",
         "date": "2026-04-25",

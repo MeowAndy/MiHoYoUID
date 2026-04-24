@@ -305,6 +305,13 @@ def _enka_weapon(equip_list: List[Dict[str, Any]]) -> Dict[str, Any]:
             weapon = equip.get("weapon") or {}
             item_id = weapon.get("itemId") or equip.get("itemId")
             refine_values = list((weapon.get("affixMap") or {}).values())
+            stats = [x for x in flat.get("weaponStats") or [] if isinstance(x, dict)]
+            attrs = {}
+            for stat in stats:
+                key = stat.get("appendPropId")
+                value = stat.get("statValue")
+                if key and value is not None:
+                    attrs[key] = value
             return {
                 "item_id": item_id,
                 "name": flat.get("nameTextMapHash") or str(item_id or "未知武器"),
@@ -312,6 +319,8 @@ def _enka_weapon(equip_list: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "promote_level": weapon.get("promoteLevel"),
                 "refine": (_to_int(refine_values[0]) + 1) if refine_values else 1,
                 "rarity": flat.get("rankLevel"),
+                "attrs": attrs,
+                "stats": stats,
             }
     return {}
 

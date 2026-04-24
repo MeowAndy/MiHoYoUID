@@ -146,6 +146,40 @@ PROP_NAME_MAP: Dict[str, str] = {
     "FIGHT_PROP_ICE_ADD_HURT": "冰伤加成",
 }
 
+WEAPON_PROP_NAME_MAP: Dict[str, str] = {
+    "FIGHT_PROP_BASE_ATTACK": "基础攻击",
+    "FIGHT_PROP_ATTACK": "攻击",
+    "FIGHT_PROP_ATTACK_PERCENT": "攻击",
+    "FIGHT_PROP_HP": "生命",
+    "FIGHT_PROP_HP_PERCENT": "生命",
+    "FIGHT_PROP_DEFENSE": "防御",
+    "FIGHT_PROP_DEFENSE_PERCENT": "防御",
+    "FIGHT_PROP_ELEMENT_MASTERY": "精通",
+    "FIGHT_PROP_CRITICAL": "暴击",
+    "FIGHT_PROP_CRITICAL_HURT": "爆伤",
+    "FIGHT_PROP_CHARGE_EFFICIENCY": "充能",
+    "FIGHT_PROP_PHYSICAL_ADD_HURT": "物伤",
+    "FIGHT_PROP_FIRE_ADD_HURT": "火伤",
+    "FIGHT_PROP_ELEC_ADD_HURT": "雷伤",
+    "FIGHT_PROP_WATER_ADD_HURT": "水伤",
+    "FIGHT_PROP_GRASS_ADD_HURT": "草伤",
+    "FIGHT_PROP_WIND_ADD_HURT": "风伤",
+    "FIGHT_PROP_ROCK_ADD_HURT": "岩伤",
+    "FIGHT_PROP_ICE_ADD_HURT": "冰伤",
+    "atkBase": "攻击",
+    "atkPct": "攻击",
+    "hpPct": "生命",
+    "defPct": "防御",
+    "mastery": "精通",
+    "cpct": "暴击",
+    "cdmg": "爆伤",
+    "dmg": "伤害",
+    "phy": "物伤",
+    "recharge": "充能",
+    "heal": "治疗",
+    "shield": "护盾",
+}
+
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
@@ -450,6 +484,12 @@ def _char_meta(name: str) -> Dict[str, Any]:
     return _load_json(_resource_path("meta-gs", "character", name, "data.json"))
 
 
+def _character_weapon_type(name: str) -> str:
+    meta = _char_meta(name)
+    weapon = str(meta.get("weapon") or "sword").strip().lower()
+    return weapon if weapon in {"sword", "claymore", "polearm", "bow", "catalyst"} else "sword"
+
+
 def _char_image(name: str, kind: str = "splash") -> Path | None:
     for file in (f"{kind}.webp", f"{kind}0.webp", f"{kind}.png"):
         path = _resource_path("meta-gs", "character", name, "imgs", file)
@@ -499,6 +539,62 @@ def _weapon_icon(weapon: Dict[str, Any]) -> Path | None:
         return path
     folder, _ = _weapon_meta(weapon)
     return _find_named_resource("meta-gs/weapon", folder, "icon.webp")
+
+
+def _fmt_weapon_attr(key: str, value: Any) -> str:
+    text = str(value)
+    if text.endswith("%"):
+        return text
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return text
+    upper = key.upper()
+    if abs(num) < 1 and any(x in upper for x in ["PERCENT", "CRITICAL", "HURT", "CHARGE", "DMG", "DAMAGE", "PCT"]):
+        num *= 100
+    suffix = "%" if any(x in upper for x in ["PERCENT", "CRITICAL", "HURT", "CHARGE", "DMG", "DAMAGE", "PCT", "CPCT", "CDMG", "RECHARGE", "HEAL", "SHIELD"]) else ""
+    if abs(num - round(num)) < 0.01:
+        return f"{round(num)}{suffix}"
+    return f"{num:.1f}{suffix}"
+
+
+def _weapon_attr_items(weapon: Dict[str, Any]) -> List[Tuple[str, str]]:
+    _, data = _weapon_meta(weapon)
+    attrs = weapon.get("attrs") if isinstance(weapon.get("attrs"), dict) else None
+    raw_attrs = attrs or data.get("attrs") or data.get("main") or {}
+    items: List[Tuple[str, str]] = []
+    if isinstance(raw_attrs, dict):
+        for key, value in raw_attrs.items():
+            if value in (None, "", 0, "0"):
+                continue
+            label = WEAPON_PROP_NAME_MAP.get(str(key), PROP_NAME_MAP.get(str(key), str(key)))
+            items.append((label, _fmt_weapon_attr(str(key), value)))
+    elif isinstance(raw_attrs, list):
+        for item in raw_attrs:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or item.get("prop") or item.get("appendPropId") or item.get("name") or "")
+            value = item.get("value") or item.get("val") or item.get("statValue")
+            if value in (None, "", 0, "0"):
+                continue
+            label = WEAPON_PROP_NAME_MAP.get(key, PROP_NAME_MAP.get(key, key or "属性"))
+            items.append((label, _fmt_weapon_attr(key, value)))
+    if not items and isinstance(data.get("attr"), dict):
+        data_attr = data.get("attr") or {}
+        level = str(weapon.get("level") or "90")
+        promote = str(weapon.get("promote_level") or "")
+        level_key = f"{level}+" if promote and promote not in {"0", "1"} and f"{level}+" in (data_attr.get("atk") or {}) else level
+        atk_map = data_attr.get("atk") if isinstance(data_attr.get("atk"), dict) else {}
+        if level_key in atk_map or level in atk_map:
+            items.append(("攻击", _fmt_weapon_attr("atkBase", atk_map.get(level_key, atk_map.get(level)))))
+        bonus_key = str(data_attr.get("bonusKey") or "")
+        bonus_map = data_attr.get("bonusData") if isinstance(data_attr.get("bonusData"), dict) else {}
+        if bonus_key and (level_key in bonus_map or level in bonus_map):
+            label = WEAPON_PROP_NAME_MAP.get(bonus_key, PROP_NAME_MAP.get(bonus_key, bonus_key))
+            items.append((label, _fmt_weapon_attr(bonus_key, bonus_map.get(level_key, bonus_map.get(level)))))
+    if not items and weapon.get("item_id"):
+        return [("武器ID", str(weapon.get("item_id")))]
+    return items[:4]
 
 
 def _artifact_set_name(rel: Dict[str, Any]) -> str:
@@ -663,7 +759,7 @@ def _draw_miao_header(img: Image.Image, draw: ImageDraw.ImageDraw, result: Panel
 
 
 def _draw_basic_panel(img: Image.Image, draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any]) -> int:
-    x, y, w, h = 25, 392, 550, 178
+    x, y, w, h = 25, 392, 550, 196
     _rounded_r(draw, (x, y, x + w, y + h), 14, (31, 30, 34), (221, 191, 135), 2)
     name = _char_name(char)
     meta = _char_meta(name)
@@ -677,14 +773,14 @@ def _draw_basic_panel(img: Image.Image, draw: ImageDraw.ImageDraw, result: Panel
 
     skills = list(char.get("skill_levels") or [])[:3]
     labels = ["普攻", "战技", "爆发"]
+    weapon_type = _character_weapon_type(name)
     for idx, label in enumerate(labels):
         lv = skills[idx] if idx < len(skills) else "-"
         cx = x + 28 + idx * 82
-        cy = y + 113
+        cy = y + 112
         draw.ellipse((cx, cy, cx + 52, cy + 52), fill=(42, 43, 48), outline=(214, 183, 112), width=2)
         icon_key = ["a", "e", "q"][idx]
-        talent_ids = meta.get("talentId") or {}
-        talent_file = "atk-sword.webp" if icon_key == "a" else f"talent-{icon_key}.webp"
+        talent_file = f"atk-{weapon_type}.webp" if icon_key == "a" else f"talent-{icon_key}.webp"
         if icon_key == "a":
             icon_path = _resource_path("common", "item", talent_file)
         else:
@@ -694,14 +790,26 @@ def _draw_basic_panel(img: Image.Image, draw: ImageDraw.ImageDraw, result: Panel
             _paste(img, icon, (cx + 9, cy + 8))
         else:
             _text(draw, (cx + 19, cy + 13), lv, (255, 245, 220), FONT_TEXT)
-        _text(draw, (cx + 19, cy + 34), lv, (255, 245, 220), FONT_TINY)
-        _text(draw, (cx + 8, cy + 56), label, (202, 195, 180), FONT_TINY)
+        lv_text = str(lv)
+        lv_w = draw.textbbox((0, 0), lv_text, font=FONT_TINY)[2]
+        _rounded_r(draw, (cx + 31, cy + 32, cx + 53, cy + 54), 10, (18, 18, 20), (214, 183, 112), 1)
+        _text(draw, (cx + 42 - lv_w // 2, cy + 35), lv_text, (255, 245, 220), FONT_TINY)
+        _text(draw, (cx + 8, cy + 62), label, (202, 195, 180), FONT_TINY)
 
     for idx in range(6):
         cx = x + 326 + idx * 33
         cy = y + 122
-        fill = (221, 191, 135) if cons is not None and idx < int(cons) else (75, 75, 78)
-        draw.ellipse((cx, cy, cx + 24, cy + 24), fill=fill, outline=(245, 230, 190), width=1)
+        icon_path = _resource_path("meta-gs", "character", name, "icons", f"cons-{idx + 1}.webp")
+        icon = _open_image(icon_path, (26, 26), contain=True)
+        active = cons is not None and idx < int(cons)
+        draw.ellipse((cx, cy, cx + 26, cy + 26), fill=(42, 43, 48), outline=(245, 230, 190), width=1)
+        if icon:
+            if not active:
+                icon.putalpha(82)
+            _paste(img, icon, (cx, cy))
+        else:
+            fill = (221, 191, 135) if active else (75, 75, 78)
+            draw.ellipse((cx + 2, cy + 2, cx + 24, cy + 24), fill=fill)
     return y + h + 16
 
 
@@ -745,7 +853,7 @@ def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict
         weapon = {}
     rarity = int(weapon.get("rarity") or 5)
     y = _draw_section_title(draw, y, "武器")
-    _rounded_r(draw, (25, y, 575, y + 112), 12, (38, 37, 42), (92, 81, 62), 1)
+    _rounded_r(draw, (25, y, 575, y + 144), 12, (38, 37, 42), (92, 81, 62), 1)
     name = _weapon_name(weapon)
     draw.rounded_rectangle((42, y + 18, 118, y + 94), radius=12, fill=_star_color(rarity))
     icon = _open_image(_weapon_icon(weapon), (72, 72), contain=True)
@@ -756,7 +864,14 @@ def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict
     refine = weapon.get("refine") or 1
     _text(draw, (134, y + 18), _fit_text(name, 13), (245, 228, 183), FONT_CARD_TITLE)
     _text(draw, (136, y + 58), f"精{_safe(refine, '1')}  Lv.{_safe(weapon.get('level'), '?')}  {'★' * min(rarity, 5)}", (226, 226, 226), FONT_SMALL)
-    return y + 128
+    attrs = _weapon_attr_items(weapon)
+    for idx, (label, value) in enumerate(attrs):
+        col = idx % 2
+        row = idx // 2
+        ax = 136 + col * 170
+        ay = y + 90 + row * 24
+        _text(draw, (ax, ay), f"{label} +{value}", (206, 210, 220), FONT_TINY)
+    return y + 160
 
 
 def _reliq_label(index: int) -> str:
@@ -769,8 +884,10 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
 
     reliqs = [r for r in (char.get("reliquaries") or []) if isinstance(r, dict)][:5]
     _, weight = _weight_for_char(char)
-    _, scores, _ = character_artifact_score(char)
-    y = _draw_section_title(draw, y, "圣遗物", f"{len(reliqs)}/5")
+    total, scores, title = character_artifact_score(char)
+    y = _draw_section_title(draw, y, "圣遗物", f"{len(reliqs)}/5  总分 {total} [{artifact_rank(total)}]")
+    _text(draw, (38, y - 14), f"评分规则：{_fit_text(title, 28)}", (170, 164, 145), FONT_TINY)
+    y += 10
     card_w, card_h = 176, 158
     for idx in range(5):
         col = idx % 3
@@ -857,7 +974,6 @@ def _draw_miao_profile(img: Image.Image, draw: ImageDraw.ImageDraw, result: Pane
     y = _draw_attrs(draw, y, char)
     y = _draw_weapon(img, draw, y, char)
     y = _draw_artifacts(img, draw, y, char)
-    _text(draw, (30, height - 38), "Created by gscore_miao-plugin · layout inspired by miao-plugin", (150, 145, 132), FONT_TINY)
     return y
 
 
