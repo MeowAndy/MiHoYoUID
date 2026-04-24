@@ -9,6 +9,126 @@ from .panel_models import PanelResult
 
 Color = Tuple[int, int, int]
 
+CHARACTER_ID_NAMES: Dict[int, str] = {
+    10000002: "神里绫华",
+    10000003: "琴",
+    10000005: "旅行者",
+    10000006: "丽莎",
+    10000007: "旅行者",
+    10000014: "芭芭拉",
+    10000015: "凯亚",
+    10000016: "迪卢克",
+    10000020: "雷泽",
+    10000021: "安柏",
+    10000022: "温迪",
+    10000023: "香菱",
+    10000024: "北斗",
+    10000025: "行秋",
+    10000026: "魈",
+    10000027: "凝光",
+    10000029: "可莉",
+    10000030: "钟离",
+    10000031: "菲谢尔",
+    10000032: "班尼特",
+    10000033: "达达利亚",
+    10000034: "诺艾尔",
+    10000035: "七七",
+    10000036: "重云",
+    10000037: "甘雨",
+    10000038: "阿贝多",
+    10000039: "迪奥娜",
+    10000041: "莫娜",
+    10000042: "刻晴",
+    10000043: "砂糖",
+    10000044: "辛焱",
+    10000045: "罗莎莉亚",
+    10000046: "胡桃",
+    10000047: "枫原万叶",
+    10000048: "烟绯",
+    10000049: "宵宫",
+    10000050: "托马",
+    10000051: "优菈",
+    10000052: "雷电将军",
+    10000053: "早柚",
+    10000054: "珊瑚宫心海",
+    10000055: "五郎",
+    10000056: "九条裟罗",
+    10000057: "荒泷一斗",
+    10000058: "八重神子",
+    10000059: "鹿野院平藏",
+    10000060: "夜兰",
+    10000062: "埃洛伊",
+    10000063: "申鹤",
+    10000064: "云堇",
+    10000065: "久岐忍",
+    10000066: "神里绫人",
+    10000067: "柯莱",
+    10000068: "多莉",
+    10000069: "提纳里",
+    10000070: "妮露",
+    10000071: "赛诺",
+    10000072: "坎蒂丝",
+    10000073: "纳西妲",
+    10000074: "莱依拉",
+    10000075: "流浪者",
+    10000076: "珐露珊",
+    10000077: "瑶瑶",
+    10000078: "艾尔海森",
+    10000079: "迪希雅",
+    10000080: "米卡",
+    10000081: "卡维",
+    10000082: "白术",
+    10000083: "琳妮特",
+    10000084: "林尼",
+    10000085: "菲米尼",
+    10000086: "莱欧斯利",
+    10000087: "那维莱特",
+    10000088: "夏洛蒂",
+    10000089: "芙宁娜",
+    10000090: "夏沃蕾",
+    10000091: "娜维娅",
+    10000092: "嘉明",
+    10000093: "闲云",
+    10000094: "千织",
+    10000095: "希格雯",
+    10000096: "阿蕾奇诺",
+    10000097: "赛索斯",
+    10000098: "克洛琳德",
+    10000099: "艾梅莉埃",
+    10000100: "卡齐娜",
+    10000101: "基尼奇",
+    10000102: "玛拉妮",
+    10000103: "希诺宁",
+    10000104: "恰斯卡",
+    10000105: "欧洛伦",
+    10000106: "玛薇卡",
+    10000107: "茜特菈莉",
+}
+
+ARTIFACT_SLOT_ICONS = ["花", "羽", "沙", "杯", "冠"]
+
+PROP_NAME_MAP: Dict[str, str] = {
+    "FIGHT_PROP_HP": "生命值",
+    "FIGHT_PROP_ATTACK": "攻击力",
+    "FIGHT_PROP_DEFENSE": "防御力",
+    "FIGHT_PROP_HP_PERCENT": "生命值%",
+    "FIGHT_PROP_ATTACK_PERCENT": "攻击力%",
+    "FIGHT_PROP_DEFENSE_PERCENT": "防御力%",
+    "FIGHT_PROP_ELEMENT_MASTERY": "元素精通",
+    "FIGHT_PROP_CRITICAL": "暴击率",
+    "FIGHT_PROP_CRITICAL_HURT": "暴击伤害",
+    "FIGHT_PROP_CHARGE_EFFICIENCY": "元素充能",
+    "FIGHT_PROP_HEAL_ADD": "治疗加成",
+    "FIGHT_PROP_PHYSICAL_ADD_HURT": "物理伤害",
+    "FIGHT_PROP_FIRE_ADD_HURT": "火伤加成",
+    "FIGHT_PROP_ELEC_ADD_HURT": "雷伤加成",
+    "FIGHT_PROP_WATER_ADD_HURT": "水伤加成",
+    "FIGHT_PROP_GRASS_ADD_HURT": "草伤加成",
+    "FIGHT_PROP_WIND_ADD_HURT": "风伤加成",
+    "FIGHT_PROP_ROCK_ADD_HURT": "岩伤加成",
+    "FIGHT_PROP_ICE_ADD_HURT": "冰伤加成",
+}
+
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = [
@@ -120,7 +240,7 @@ def _draw_character_card(draw: ImageDraw.ImageDraw, char: Dict[str, Any], index:
     weapon_name = "未知武器"
     weapon_level = "?"
     if isinstance(weapon, dict):
-        weapon_name = str(weapon.get("name") or "未知武器")
+        weapon_name = _display_name(weapon.get("name"), "未知武器")
         weapon_level = _safe(weapon.get("level"), "?")
 
     props = char.get("fight_props") or {}
@@ -147,7 +267,44 @@ def _draw_character_card(draw: ImageDraw.ImageDraw, char: Dict[str, Any], index:
 
 
 def _char_name(char: Dict[str, Any]) -> str:
-    return str(char.get("name") or char.get("avatar_name") or f"角色ID {char.get('avatar_id') or '?'}")
+    name = char.get("name") or char.get("avatar_name")
+    if name:
+        return str(name)
+    avatar_id = char.get("avatar_id") or char.get("avatarId")
+    try:
+        mapped = CHARACTER_ID_NAMES.get(int(avatar_id))
+    except (TypeError, ValueError):
+        mapped = None
+    return mapped or "未知角色"
+
+
+def _display_name(value: Any, fallback: str) -> str:
+    text = str(value or "").strip()
+    if not text or text.isdigit():
+        return fallback
+    return text
+
+
+def _prop_name(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "主词条"
+    upper = text.upper()
+    if text in PROP_NAME_MAP:
+        return PROP_NAME_MAP[text]
+    if upper in PROP_NAME_MAP:
+        return PROP_NAME_MAP[upper]
+    return text.replace("FIGHT_PROP_", "").replace("_", " ")[:16]
+
+
+def _artifact_level(value: Any) -> str:
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        return "-"
+    if level <= 0:
+        return "-"
+    return str(max(level - 1, 0)) if level > 20 else str(level)
 
 
 def _star_color(rarity: int) -> Color:
@@ -273,7 +430,7 @@ def _draw_weapon(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int
     _rounded_r(draw, (25, y, 575, y + 112), 12, (38, 37, 42), (92, 81, 62), 1)
     draw.rounded_rectangle((42, y + 18, 118, y + 94), radius=12, fill=_star_color(rarity))
     _text(draw, (66, y + 40), "武", (255, 247, 230), FONT_CARD_TITLE)
-    name = weapon.get("name") or "未知武器"
+    name = _display_name(weapon.get("name"), "未知武器")
     _text(draw, (134, y + 18), name, (245, 228, 183), FONT_CARD_TITLE)
     _text(draw, (136, y + 58), f"Lv.{_safe(weapon.get('level'), '?')}  {'★' * min(rarity, 5)}", (226, 226, 226), FONT_SMALL)
     return y + 128
@@ -293,16 +450,16 @@ def _draw_artifacts(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> 
         x = 25 + col * 187
         yy = y + row * 140
         rel = reliqs[idx] if idx < len(reliqs) else {}
-        level = rel.get("level") or 0
+        level = _artifact_level(rel.get("level"))
         rarity = int(rel.get("rarity") or 5)
         _rounded_r(draw, (x, yy, x + card_w, yy + card_h), 12, (42, 39, 42), _star_color(rarity), 1)
         draw.rounded_rectangle((x + 12, yy + 12, x + 58, yy + 58), radius=10, fill=_star_color(rarity))
-        _text(draw, (x + 24, yy + 23), str(idx + 1), (255, 247, 230), FONT_SMALL)
-        _text(draw, (x + 70, yy + 14), _reliq_label(idx), (245, 228, 183), FONT_SMALL)
-        main = str(rel.get("main_prop") or "主词条")
-        main = main.replace("FIGHT_PROP_", "").replace("_", " ")[:16]
+        _text(draw, (x + 24, yy + 23), ARTIFACT_SLOT_ICONS[idx], (255, 247, 230), FONT_SMALL)
+        title = _display_name(rel.get("name"), _reliq_label(idx))
+        _text(draw, (x + 70, yy + 14), title[:6], (245, 228, 183), FONT_SMALL)
+        main = _prop_name(rel.get("main_prop") or rel.get("main"))
         _text(draw, (x + 14, yy + 68), main, (210, 210, 210), FONT_TINY)
-        _text(draw, (x + 14, yy + 94), f"+{level if level else '-'}  {'★' * min(rarity, 5)}", (144, 232, 74), FONT_TINY)
+        _text(draw, (x + 14, yy + 94), f"+{level}  {'★' * min(rarity, 5)}", (144, 232, 74), FONT_TINY)
     return y + 292
 
 

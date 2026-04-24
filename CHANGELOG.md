@@ -2,6 +2,16 @@
 
 All notable changes to `gscore_miao-plugin` are documented in this file.
 
+## [0.8.2] - 2026-04-25
+
+### Fixed
+- 修复 Enka 仅返回数字 ID 时，面板图角色名和装备名显示大量数字的问题。
+- 圣遗物卡片图标由 `1-5` 数字占位改为 `花/羽/沙/杯/冠`。
+- 常见 Enka 词条 ID 改为中文显示，例如暴击率、元素充能、各元素伤害。
+
+### Changed
+- 补充基础角色 ID 到中文名映射，作为继续迁移原版素材前的显示兜底。
+
 ## [0.8.1] - 2026-04-25
 
 ### Changed
