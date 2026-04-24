@@ -1,0 +1,78 @@
+# gscore_miao-plugin
+
+将 Yunzai `miao-plugin` 迁移为可在 GsCore 运行的简化插件。
+
+## 已移植能力（v0.3.1）
+
+- 帮助：`喵喵帮助` / `喵喵菜单`
+- 版本：`喵喵版本`
+- 设置：`#喵喵设置`
+- 设置项：
+  - `#喵喵设置面板服务 <auto|miao|enka|mgg|hutao|mys>`
+  - `#喵喵设置面板图 <开启|关闭>`
+  - `#喵喵设置组队 <开启|关闭>`
+  - `#喵喵设置星级 <开启|关闭>`
+  - `#喵喵设置逗号 <2-8>`
+  - `#喵喵设置历史`
+  - `#喵喵设置导出`
+  - `#喵喵设置重置`
+- 更新日志：`喵喵更新日志`
+- 面板入口：`喵喵面板`（已保留入口，数据源接入后可继续扩展）
+- 权限控制：支持游客开关（关闭后仅管理员可用）
+- 状态页：注册 GsCore 插件状态统计
+- WebUI 配置项（GsCore 网页控制台）：
+  - EnableHelp
+  - EnableVersion
+  - EnableMiaoSetting
+  - HelpTitle
+  - HelpSubTitle
+  - AllowedPanelServers
+  - DefaultPanelServer
+  - AllowGuestUse
+  - RecentHistoryLimit
+  - UpdateLogLimit
+  - EnableSettingExport
+  - EnableSettingReset
+  - MaxCommaGroup
+
+## 目录
+
+- `gscore_miao_plugin/` 插件主体
+- `gscore_miao_plugin/config_default.py` WebUI 配置模型
+- `gscore_miao_plugin/config.py` StringConfig 注册
+- `gscore_miao_plugin/database.py` WebUI 数据表映射（用户配置/历史）
+- `gscore_miao_plugin/status.py` GsCore 状态页注册
+
+## 安装
+
+将本目录放入 GsCore 插件目录，重启 GsCore 后即可加载：
+
+- 插件名：`GsCoreMiao`
+- 强制前缀：`喵喵` / `miao`
+- 配置文件：GsCore 资源目录下的 `GsCoreMiao/config.json`
+
+## 说明
+
+原 `miao-plugin` 为 Yunzai 生态（Node.js）插件，和 GsCore（Python）运行时差异较大。
+当前版本为 **功能语义迁移（v0.3）**，重点迁移命令形态、配置管理、更新日志与基础权限控制能力。
+由于原仓库为 Node.js/Yunzai 生态，涉及截图渲染、面板查询、抽卡、角色资料等能力需要逐项改写为 Python/GsCore 异步实现；当前项目保留了扩展入口。
+
+## 更新日志（内置）
+
+完整变更记录见 `CHANGELOG.md`。
+
+- v0.3.1
+  - 修正 GsCore 强制前缀下的命令匹配方式
+  - 补充面板命令入口占位与 WebUI 用户配置字段
+  - 增加 GsCore 状态页注册
+
+- v0.3.0
+  - 帮助改为结构化命令分组展示
+  - 新增 `#喵喵设置星级` 与 `#喵喵设置逗号`
+  - 新增 `#喵喵设置导出` 与 `#喵喵设置重置`
+  - 设置读取支持默认值合并
+- v0.2.0
+  - 增加 `喵喵更新日志`
+  - 增加 `#喵喵设置历史`
+  - 增加游客开关与管理员限制
+  - 统一版本信息源
