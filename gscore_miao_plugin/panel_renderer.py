@@ -769,23 +769,34 @@ def _draw_artifact_detail(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, c
     return y
 
 
-def _draw_miao_profile(img: Image.Image, draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any], width: int, height: int) -> None:
+def _draw_miao_profile(img: Image.Image, draw: ImageDraw.ImageDraw, result: PanelResult, char: Dict[str, Any], width: int, height: int) -> int:
     _draw_miao_header(img, draw, result, char, width)
     y = _draw_basic_panel(img, draw, result, char)
     y = _draw_attrs(draw, y, char)
     y = _draw_weapon(img, draw, y, char)
     y = _draw_artifacts(img, draw, y, char)
     _text(draw, (30, height - 38), "Created by gscore_miao-plugin · layout inspired by miao-plugin", (150, 145, 132), FONT_TINY)
+    return y
+
+
+def _crop_panel_canvas(img: Image.Image, content_bottom: int, footer: str) -> Image.Image:
+    final_height = max(content_bottom + 74, 760)
+    final_height = min(final_height, img.height)
+    cropped = img.crop((0, 0, img.width, final_height))
+    draw = ImageDraw.Draw(cropped)
+    _text(draw, (30, final_height - 38), footer, (150, 145, 132), FONT_TINY)
+    return cropped
 
 
 async def render_panel_image(result: PanelResult) -> bytes:
     characters = list(_iter_cards((result.characters or [])[:8]))
     if len(characters) == 1:
         width = 600
-        height = 1180
+        height = 1480
         img = Image.new("RGBA", (width, height), (22, 23, 27, 255))
         draw = ImageDraw.Draw(img)
-        _draw_miao_profile(img, draw, result, characters[0], width, height)
+        bottom = _draw_miao_profile(img, draw, result, characters[0], width, height)
+        img = _crop_panel_canvas(img, bottom, "Created by gscore_miao-plugin · layout inspired by miao-plugin")
         return await convert_img(img)
 
     card_count = max(len(characters), 1)
@@ -884,13 +895,13 @@ async def render_artifact_image(result: PanelResult, character_query: str = "") 
         raise ValueError("当前数据源没有返回可渲染的角色详情")
     char = characters[0]
     width = 600
-    height = 1220
+    height = 1520
     img = Image.new("RGBA", (width, height), (22, 23, 27, 255))
     draw = ImageDraw.Draw(img)
     _draw_miao_header(img, draw, result, char, width)
     y = _draw_basic_panel(img, draw, result, char)
     y = _draw_artifact_detail(img, draw, y, char)
-    _text(draw, (30, height - 38), "Created by gscore_miao-plugin · artifact detail inspired by miao-plugin", (150, 145, 132), FONT_TINY)
+    img = _crop_panel_canvas(img, y, "Created by gscore_miao-plugin · artifact detail inspired by miao-plugin")
     return await convert_img(img)
 
 

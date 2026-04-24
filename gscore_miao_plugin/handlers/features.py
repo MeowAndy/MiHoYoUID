@@ -9,7 +9,7 @@ from ..config import MiaoConfig
 from ..damage_service import render_damage_text
 from ..panel_cache import clear_cached_panel
 from ..panel_renderer import (render_artifact_image,
-                              render_artifact_list_image,
+                              render_artifact_list_image, render_panel_image,
                               render_single_panel_image)
 from ..panel_service import query_panel, render_panel_text
 from ..settings import merge_user_cfg
@@ -90,6 +90,23 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
         return await bot.send(f"图片面板渲染失败，已回退文本摘要：{e}\n\n{render_panel_text(result)}")
 
 
+@sv_feature.on_regex(r"^(圣遗物列表|遗物列表)\s*(?P<uid>\d{9,10})?$", block=True)
+async def send_artifact_list(bot: Bot, ev: Event):
+    if not MiaoConfig.get_config("EnableArtifactScore").data:
+        return
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
+    if not uid:
+        return await bot.send("请携带 UID，例如：喵喵圣遗物列表 100000001\n也可先绑定：喵喵设置uid 100000001")
+    result = await _query_user_panel(bot, ev, uid)
+    if result:
+        try:
+            await bot.send(await render_artifact_list_image(result))
+        except Exception as e:
+            await bot.send(f"圣遗物列表图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result)}")
+
+
 @sv_feature.on_regex(r"^(圣遗物评分|遗物评分|圣遗物)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
 async def send_artifact(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableArtifactScore").data:
@@ -109,23 +126,6 @@ async def send_artifact(bot: Bot, ev: Event):
             except Exception as e:
                 return await bot.send(f"圣遗物详情图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result, name)}")
         await bot.send(render_artifact_text(result, name))
-
-
-@sv_feature.on_regex(r"^(圣遗物列表|遗物列表)\s*(?P<uid>\d{9,10})?$", block=True)
-async def send_artifact_list(bot: Bot, ev: Event):
-    if not MiaoConfig.get_config("EnableArtifactScore").data:
-        return
-    if not can_use_plugin(ev):
-        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
-    uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
-    if not uid:
-        return await bot.send("请携带 UID，例如：喵喵圣遗物列表 100000001\n也可先绑定：喵喵设置uid 100000001")
-    result = await _query_user_panel(bot, ev, uid)
-    if result:
-        try:
-            await bot.send(await render_artifact_list_image(result))
-        except Exception as e:
-            await bot.send(f"圣遗物列表图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result)}")
 
 
 @sv_feature.on_regex(r"^(伤害计算|伤害估算|伤害)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
@@ -174,7 +174,10 @@ async def send_panel_list(bot: Bot, ev: Event):
         return await bot.send("请携带 UID，例如：喵喵面板列表 100000001\n也可先绑定：喵喵设置uid 100000001")
     result = await _query_user_panel(bot, ev, uid)
     if result:
-        await bot.send(render_panel_text(result))
+        try:
+            await bot.send(await render_panel_image(result))
+        except Exception as e:
+            await bot.send(f"面板列表图渲染失败，已回退文本摘要：{e}\n\n{render_panel_text(result)}")
 
 
 @sv_feature.on_regex(r"^(更新面板|刷新面板|全部面板更新|重载面板)\s*(?P<uid>\d{9,10})?$", block=True)

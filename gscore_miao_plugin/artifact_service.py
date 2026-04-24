@@ -272,10 +272,19 @@ def render_artifact_text(result: PanelResult, character_query: str = "") -> str:
     characters = result.characters or []
     if character_query:
         q = (resolve_alias(character_query) or character_query).lower()
-        characters = [
+        matched = [
             c for c in characters
             if q in _char_name(c).lower()
-        ] or characters[:1]
+        ]
+        if not matched:
+            available = "、".join(_char_name(c) for c in characters[:8]) or "无角色"
+            return "\n".join([
+                "【喵喵圣遗物评分】",
+                f"UID：{result.uid}",
+                f"数据源：{result.source}",
+                f"未在公开面板中找到角色：{character_query}。当前可见角色：{available}",
+            ])
+        characters = matched
 
     lines = ["【喵喵圣遗物评分】", f"UID：{result.uid}", f"数据源：{result.source}"]
     if not characters:

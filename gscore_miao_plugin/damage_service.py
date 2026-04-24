@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from .alias_data import resolve_alias
 from .panel_models import PanelResult
+from .panel_renderer import CHARACTER_ID_NAMES
 
 
 def _num(value: Any, default: float = 0.0) -> float:
@@ -35,14 +37,42 @@ def estimate_character_damage(char: Dict[str, Any]) -> Dict[str, float]:
     }
 
 
+def _char_name(char: Dict[str, Any]) -> str:
+    avatar_id = char.get("avatar_id") or char.get("avatarId")
+    try:
+        mapped = CHARACTER_ID_NAMES.get(int(avatar_id))
+    except (TypeError, ValueError):
+        mapped = None
+    if mapped:
+        return mapped
+    name = str(char.get("name") or char.get("avatar_name") or "").strip()
+    return resolve_alias(name) or name or f"角色ID {avatar_id or '?'}"
+
+
+def _char_match_text(char: Dict[str, Any]) -> str:
+    return " ".join([
+        _char_name(char),
+        str(char.get("name") or ""),
+        str(char.get("avatar_name") or ""),
+        str(char.get("avatar_id") or char.get("avatarId") or ""),
+    ]).lower()
+
+
 def render_damage_text(result: PanelResult, character_query: str = "") -> str:
     characters: List[Dict[str, Any]] = result.characters or []
     if character_query:
-        q = character_query.lower()
-        characters = [
-            c for c in characters
-            if q in str(c.get("name") or c.get("avatar_name") or c.get("avatar_id") or "").lower()
-        ] or characters[:1]
+        q = character_query.strip().lower()
+        resolved = (resolve_alias(character_query) or character_query).strip().lower()
+        matched = [c for c in characters if q in _char_match_text(c) or resolved in _char_match_text(c)]
+        if not matched:
+            available = "、".join(_char_name(c) for c in characters[:8]) or "无角色"
+            return "\n".join([
+                "【喵喵伤害估算】",
+                f"UID：{result.uid}",
+                f"数据源：{result.source}",
+                f"未在公开面板中找到角色：{character_query}。当前可见角色：{available}",
+            ])
+        characters = matched
 
     lines = ["【喵喵伤害估算】", f"UID：{result.uid}", f"数据源：{result.source}"]
     if not characters:
@@ -50,7 +80,7 @@ def render_damage_text(result: PanelResult, character_query: str = "") -> str:
         return "\n".join(lines)
 
     for index, char in enumerate(characters[:8], start=1):
-        name = char.get("name") or char.get("avatar_name") or f"角色ID {char.get('avatar_id') or '?'}"
+        name = _char_name(char)
         dmg = estimate_character_damage(char)
         lines.append(
             f"{index}. {name}：普攻 {dmg['normal']} / 战技 {dmg['skill']} / 爆发 {dmg['burst']} / 期望 {dmg['expect']}"
