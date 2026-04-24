@@ -1,3 +1,5 @@
+import re
+
 from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 from gsuid_core.sv import SV
@@ -40,6 +42,27 @@ def _resolve_name(raw_name: str) -> str:
     return resolve_alias(name) or name
 
 
+def _extract_uid_from_text(text: str) -> str:
+    match = re.search(r"\b(\d{9,10})\b", text or "")
+    return match.group(1) if match else ""
+
+
+async def _send_artifact_list(bot: Bot, ev: Event, uid: str) -> None:
+    if not MiaoConfig.get_config("EnableArtifactScore").data:
+        return
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    uid = await _uid_from_event(ev, uid)
+    if not uid:
+        return await bot.send("请携带 UID，例如：喵喵圣遗物列表 100000001\n也可先绑定：喵喵设置uid 100000001")
+    result = await _query_user_panel(bot, ev, uid)
+    if result:
+        try:
+            await bot.send(await render_artifact_list_image(result))
+        except Exception as e:
+            await bot.send(f"圣遗物列表图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result)}")
+
+
 @sv_feature.on_regex(r"^(角色别名|别名)\s*(?P<name>.*)$", block=True)
 async def send_alias(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableAliasQuery").data:
@@ -61,6 +84,9 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
     data = ev.regex_dict or {}
     name = _resolve_name(data.get("name") or "")
     mode = (data.get("mode") or "").strip()
+    if mode in {"圣遗物", "遗器"} and name.startswith(("列表", "评分列表")):
+        uid_in_name = _extract_uid_from_text(name)
+        return await _send_artifact_list(bot, ev, uid_in_name or (data.get("uid") or "").strip())
     uid = await _uid_from_event(ev, (data.get("uid") or "").strip())
     if not uid:
         return await bot.send(f"请携带 UID，例如：喵喵{name}{mode} 100000001\n也可先绑定：喵喵设置uid 100000001")
@@ -92,19 +118,7 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
 
 @sv_feature.on_regex(r"^(圣遗物列表|遗物列表)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_artifact_list(bot: Bot, ev: Event):
-    if not MiaoConfig.get_config("EnableArtifactScore").data:
-        return
-    if not can_use_plugin(ev):
-        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
-    uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
-    if not uid:
-        return await bot.send("请携带 UID，例如：喵喵圣遗物列表 100000001\n也可先绑定：喵喵设置uid 100000001")
-    result = await _query_user_panel(bot, ev, uid)
-    if result:
-        try:
-            await bot.send(await render_artifact_list_image(result))
-        except Exception as e:
-            await bot.send(f"圣遗物列表图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result)}")
+    await _send_artifact_list(bot, ev, ((ev.regex_dict or {}).get("uid") or "").strip())
 
 
 @sv_feature.on_regex(r"^(圣遗物评分|遗物评分|圣遗物)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
