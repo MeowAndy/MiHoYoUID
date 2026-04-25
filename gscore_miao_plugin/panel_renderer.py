@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from gsuid_core.utils.image.convert import convert_img
 from PIL import Image, ImageDraw, ImageFont
@@ -182,13 +182,45 @@ WEAPON_PROP_NAME_MAP: Dict[str, str] = {
 }
 
 
+def _plugin_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _append_resource_dir(dirs: List[Path], path: Path | None) -> None:
+    if not path:
+        return
+    resource_dir = path if path.name == "resources" else path / "resources"
+    try:
+        resource_dir = resource_dir.resolve()
+    except Exception:
+        pass
+    if resource_dir.exists() and resource_dir not in dirs:
+        dirs.append(resource_dir)
+
+
+@lru_cache(maxsize=1)
+def _resource_dirs() -> Tuple[Path, ...]:
+    dirs: List[Path] = []
+
+    # 优先使用本插件自带资源，避免要求用户额外 clone Yunzai miao-plugin。
+    root = _plugin_root()
+    _append_resource_dir(dirs, root)
+    _append_resource_dir(dirs, root / "gscore_miao_plugin")
+
+    configured = str(MiaoConfig.get_config("MiaoPluginResourcePath").data or "").strip()
+    if configured:
+        _append_resource_dir(dirs, Path(configured))
+
+    # 兼容旧配置/旧部署：仅当本插件资源不存在或缺素材时再回退外部 miao-plugin。
+    _append_resource_dir(dirs, root.parent / "miao-plugin")
+    _append_resource_dir(dirs, Path("E:/gsuid_core/gsuid_core/plugins/miao-plugin"))
+    return tuple(dirs)
+
+
 def _font(size: int, bold: bool = False, miao: str = "") -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     candidates = []
     if miao:
-        candidates.extend([
-            str(Path(__file__).resolve().parents[1].parent / "miao-plugin" / "resources" / "common" / "font" / miao),
-            str(Path("E:/gsuid_core/gsuid_core/plugins/miao-plugin/resources/common/font") / miao),
-        ])
+        candidates.extend(str(resource_dir / "common" / "font" / miao) for resource_dir in _resource_dirs())
     candidates.extend([
         "msyhbd.ttc" if bold else "msyh.ttc",
         "Microsoft YaHei UI Bold.ttf" if bold else "Microsoft YaHei UI.ttf",
@@ -232,31 +264,18 @@ def _shadow_text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill
     draw.text((x, y), str(text), fill=fill, font=font)
 
 
-def _plugin_root() -> Path:
-    return Path(__file__).resolve().parents[1]
-
-
 def _miao_root() -> Path | None:
-    configured = str(MiaoConfig.get_config("MiaoPluginResourcePath").data or "").strip()
-    candidates = []
-    if configured:
-        candidates.append(Path(configured))
-    candidates.extend([
-        _plugin_root().parent / "miao-plugin",
-        Path("E:/gsuid_core/gsuid_core/plugins/miao-plugin"),
-    ])
-    for path in candidates:
-        if (path / "resources").exists():
-            return path
-    return None
+    dirs = _resource_dirs()
+    return dirs[0].parent if dirs else None
 
 
 def _resource_path(*parts: str) -> Path | None:
-    root = _miao_root()
-    if not root:
-        return None
-    path = root / "resources" / Path(*parts)
-    return path if path.exists() else None
+    rel = Path(*parts)
+    for resource_dir in _resource_dirs():
+        path = resource_dir / rel
+        if path.exists():
+            return path
+    return None
 
 
 def _open_image(path: Path | None, size: Tuple[int, int] | None = None, contain: bool = True) -> Image.Image | None:
@@ -337,30 +356,28 @@ def _load_json(path: Path | None) -> Dict[str, Any]:
 def _find_meta_by_id(base: str, item_id: str) -> Tuple[str, Dict[str, Any]]:
     if not item_id:
         return "", {}
-    root = _miao_root()
-    if not root:
-        return "", {}
-    root_dir = root / "resources" / Path(base)
-    if not root_dir.exists():
-        return "", {}
     target = str(item_id)
-    for data_file in root_dir.rglob("data.json"):
-        data = _load_json(data_file)
-        if str(data.get("id") or "") == target:
-            return data_file.parent.name, data
-        for item in data.values():
-            if not isinstance(item, dict):
-                continue
-            if str(item.get("id") or "") != target:
-                continue
-            name = str(item.get("name") or item.get("sName") or "").strip()
-            merged = dict(item)
-            if name:
-                detail = _load_json(data_file.parent / name / "data.json")
-                if detail:
-                    merged = {**merged, **detail}
-                return name, merged
-            return data_file.parent.name, merged
+    for resource_dir in _resource_dirs():
+        root_dir = resource_dir / Path(base)
+        if not root_dir.exists():
+            continue
+        for data_file in root_dir.rglob("data.json"):
+            data = _load_json(data_file)
+            if str(data.get("id") or "") == target:
+                return data_file.parent.name, data
+            for item in data.values():
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("id") or "") != target:
+                    continue
+                name = str(item.get("name") or item.get("sName") or "").strip()
+                merged = dict(item)
+                if name:
+                    detail = _load_json(data_file.parent / name / "data.json")
+                    if detail:
+                        merged = {**merged, **detail}
+                    return name, merged
+                return data_file.parent.name, merged
     return "", {}
 
 
@@ -760,19 +777,17 @@ def _source_display_name(source: str) -> str:
 def _find_named_resource(base: str, name: str, filename: str) -> Path | None:
     if not name or name.isdigit():
         return None
-    root = _miao_root()
-    if not root:
-        return None
     target = str(name).strip()
-    root_dir = root / "resources" / Path(base)
-    if not root_dir.exists():
-        return None
-    direct = root_dir / target / filename
-    if direct.exists():
-        return direct
-    for path in root_dir.rglob(filename):
-        if path.parent.name == target:
-            return path
+    for resource_dir in _resource_dirs():
+        root_dir = resource_dir / Path(base)
+        if not root_dir.exists():
+            continue
+        direct = root_dir / target / filename
+        if direct.exists():
+            return direct
+        for path in root_dir.rglob(filename):
+            if path.parent.name == target:
+                return path
     return None
 
 
