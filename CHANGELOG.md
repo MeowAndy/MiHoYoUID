@@ -2,6 +2,15 @@
 
 All notable changes to `MiHoYoUID` are documented in this file.
 
+## [0.15.15] - 2026-04-26
+
+### Changed
+- 圣遗物/遗器评分权重改为按角色独立规则文件加载，后续可直接维护 `MiHoYoUID/artifact_rules/<gs|sr>/<角色>.py`。
+- 同步 miao-plugin 当前原神 113 个、星铁 89 个角色默认评分权重，并保留绝缘4/西风/薙草等通用动态规则。
+- 新增 `tools/sync_miao_artifact_rules.py`，用于后续从 miao-plugin 更新默认角色权重。
+- 原神更新日志与崩铁更新日志拆分为两套记录，后续按功能所属游戏分别维护。
+- 强制前缀新增 `MM`，除动态配置前缀与 `miao` 外，也可使用 `MM原神帮助` / `MM崩铁帮助` 等入口。
+
 ## [0.15.14] - 2026-04-26
 
 ### Changed

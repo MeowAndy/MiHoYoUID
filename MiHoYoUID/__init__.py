@@ -12,7 +12,7 @@ _prefix = str(MiaoConfig.get_config("CommandPrefix").data or "喵喵").strip() o
 
 Plugins(
     name=PLUGIN_NAME,
-    force_prefix=[_prefix, "miao"],
+    force_prefix=[_prefix, "miao", "MM"],
     allow_empty_prefix=False,
 )
 
