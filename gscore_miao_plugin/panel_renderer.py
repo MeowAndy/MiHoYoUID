@@ -1506,6 +1506,9 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
     _text(draw, (45, y + 70), "有效词条：" + " / ".join(names.get(k, k) for k in useful[:8]), (188, 196, 210), FONT_TINY)
     y += 114
     card_w, card_h = 176, 238
+    relic_name_font = _font(13, False, "HYWH-65W.ttf")
+    relic_line_fonts = [_font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf"), _font(11, False, "HYWH-65W.ttf")]
+    relic_score_fonts = [_font(12, False, "HYWH-65W.ttf"), _font(11, False, "HYWH-65W.ttf")]
     for idx in range(max_count):
         col = idx % 3
         row = idx // 3
@@ -1525,24 +1528,26 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
         else:
             _text(draw, (x + 24, yy + 23), (SR_RELIC_SLOT_ICONS if is_sr else ARTIFACT_SLOT_ICONS)[idx], (255, 247, 230), FONT_SMALL)
         title = _artifact_name(rel, _reliq_label(idx, is_sr))
-        title_lines = _wrap_text_by_width(draw, title, 96, FONT_TINY, 2)
+        title_lines = _wrap_text_by_width(draw, title, 96, relic_name_font, 2)
         for t_idx, title_line in enumerate(title_lines[:2]):
-            _text(draw, (x + 68, yy + 12 + t_idx * 18), title_line, (245, 228, 183), FONT_TINY)
+            _text(draw, (x + 68, yy + 12 + t_idx * 17), title_line, (245, 228, 183), relic_name_font)
         main = _prop_name(rel.get("main_prop") or rel.get("main"))
         main_value = _prop_value(rel.get("main_prop") or rel.get("main"))
-        main_line, main_font = _fit_font_text(draw, f"{main}+{main_value}" if main_value else main, 148, [FONT_TINY, _font(16), _font(15)], 5)
+        main_line, main_font = _fit_font_text(draw, f"{main}+{main_value}" if main_value else main, 148, relic_line_fonts, 5)
         _text(draw, (x + 14, yy + 66), main_line, (210, 210, 210), main_font)
         score = scores[idx] if idx < len(scores) else (score_reliquary(rel, weight, idx) if rel else 0)
         score_text = f"{score:.1f} {artifact_rank(score)}" if rel else "-"
-        _text(draw, (x + 14, yy + 88), f"+{level}  {score_text}", (255, 232, 170), FONT_TINY)
+        _text(draw, (x + 14, yy + 88), f"+{level}", (255, 232, 170), relic_line_fonts[0])
+        score_fit, score_font = _fit_font_text(draw, score_text, 94, relic_line_fonts, 3)
+        _text(draw, (x + card_w - 14 - _text_width(draw, score_fit, score_font), yy + 88), score_fit, (255, 232, 170), score_font)
         if rel:
             for s_idx, prop in enumerate((rel.get("sub_props") or [])[:4]):
                 left, score_part = _artifact_prop_parts(prop, weight, "sr" if is_sr else "gs")
                 line_y = yy + 116 + s_idx * 27
-                left_text, left_font = _fit_font_text(draw, left, 104 if score_part else 148, [FONT_TINY, _font(16), _font(15)], 5)
+                left_text, left_font = _fit_font_text(draw, left, 108 if score_part else 148, relic_line_fonts, 5)
                 _text(draw, (x + 14, line_y), left_text, (188, 196, 210), left_font)
                 if score_part:
-                    score_text_fit, score_font = _fit_font_text(draw, score_part, 52, [FONT_TINY, _font(15), _font(14)], 3)
+                    score_text_fit, score_font = _fit_font_text(draw, score_part, 58, relic_score_fonts, 3)
                     _text(draw, (x + card_w - 14 - _text_width(draw, score_text_fit, score_font), line_y), score_text_fit, (255, 167, 72), score_font)
     return y + 512
 
@@ -1586,15 +1591,18 @@ def _draw_artifact_detail(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, c
         _text(draw, (x + 96, y + 44), main_line, (218, 218, 218), main_font)
         detail_props = list((rel.get("sub_props") or [])[:4])
         if detail_props:
+            detail_left_fonts = [_font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf"), _font(11, False, "HYWH-65W.ttf")]
+            detail_score_fonts = [_font(12, False, "HYWH-65W.ttf"), _font(11, False, "HYWH-65W.ttf")]
             for s_idx, prop in enumerate(detail_props):
                 left, score_part = _artifact_prop_parts(prop, weight, "sr" if is_sr else "gs")
                 px = x + 96 + (s_idx % 2) * 178
                 py = y + 72 + (s_idx // 2) * 19
-                left_text, left_font = _fit_font_text(draw, left, 118 if score_part else 160, [FONT_TINY, _font(15), _font(14)], 5)
+                left_text, left_font = _fit_font_text(draw, left, 118 if score_part else 160, detail_left_fonts, 5)
                 _text(draw, (px, py), left_text, (188, 196, 210), left_font)
                 if score_part:
-                    score_text_fit, score_font = _fit_font_text(draw, score_part, 48, [FONT_TINY, _font(14)], 3)
-                    _text(draw, (px + 122, py), score_text_fit, (255, 167, 72), score_font)
+                    score_right = x + 264 if s_idx % 2 == 0 else x + 442
+                    score_text_fit, score_font = _fit_font_text(draw, score_part, 56, detail_score_fonts, 3)
+                    _text(draw, (score_right - _text_width(draw, score_text_fit, score_font), py), score_text_fit, (255, 167, 72), score_font)
         else:
             _text(draw, (x + 96, y + 72), "无副词条", (188, 196, 210), FONT_TINY)
         _rounded_r(draw, (x + 462, y + 22, x + 532, y + 62), 10, (80, 62, 36), (221, 191, 135), 1)
