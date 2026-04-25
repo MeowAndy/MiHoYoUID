@@ -2,6 +2,11 @@
 
 All notable changes to `gscore_miao-plugin` are documented in this file.
 
+## [0.15.10] - 2026-04-26
+
+### Changed
+- 单角色面板角色属性与光锥/武器标题改为居中显示，原神侧同步应用武器标题布局。
+
 ## [0.15.9] - 2026-04-26
 
 ### Changed

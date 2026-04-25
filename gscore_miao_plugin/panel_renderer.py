@@ -1444,7 +1444,7 @@ def _draw_attrs(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
             ("元素充能", _fmt(props.get("充能效率"), "%")),
             ("伤害加成", _fmt(props.get("元素伤害加成") or props.get("伤害加成"), "%")),
         ]
-    y = _draw_section_title(draw, y, "角色属性")
+    y = _draw_section_title(draw, y, "角色属性", center=True)
     row_h = 38
     for idx, (label, value) in enumerate(attrs):
         row = idx // 2
@@ -1467,7 +1467,7 @@ def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict
         weapon = dict(weapon)
         weapon.setdefault("game", "sr")
     rarity = int(weapon.get("rarity") or 5)
-    y = _draw_section_title(draw, y, "光锥" if is_sr else "武器")
+    y = _draw_section_title(draw, y, "光锥" if is_sr else "武器", center=True)
     _rounded_r(draw, (25, y, 575, y + 144), 12, (38, 37, 42), (92, 81, 62), 1)
     name = _weapon_name(weapon)
     draw.rounded_rectangle((42, y + 18, 118, y + 94), radius=12, fill=_star_color(rarity))
