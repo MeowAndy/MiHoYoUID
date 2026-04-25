@@ -330,6 +330,9 @@ def _server_id(uid: str) -> str:
     return "cn_qd01" if str(uid).startswith("5") else "cn_gf01"
 
 
+MYS_API_BASE_URL = "https://api-takumi-record.mihoyo.com"
+
+
 def _md5(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()
 
@@ -622,10 +625,8 @@ class MysPanelSource(BasePanelSource):
         if cached:
             return cached
 
-        base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data)
+        base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
         cookie = self.cookie or str(MiaoConfig.get_config("MysCookie").data or "").strip()
-        if not base_url:
-            raise PanelSourceError(self.source_name, "米游社 API 地址未配置")
         if not cookie:
             raise PanelSourceError(self.source_name, "米游社 Cookie 未配置")
 
