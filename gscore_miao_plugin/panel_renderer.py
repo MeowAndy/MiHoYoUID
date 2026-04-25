@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
@@ -206,6 +207,12 @@ FONT_HELP_TITLE = _font(48, True)
 FONT_HELP_GROUP = _font(28, True)
 FONT_HELP_CMD = _font(22, True)
 FONT_HELP_DESC = _font(16)
+FONT_PROFILE_TITLE = _font(44, True)
+FONT_PROFILE_UID = _font(22, True)
+FONT_PROFILE_LABEL = _font(18, True)
+FONT_PROFILE_SMALL = _font(13)
+FONT_PROFILE_NAME = _font(20, True)
+FONT_PROFILE_CONS = _font(13, True)
 
 
 def _text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill: Color, font: ImageFont.ImageFont) -> None:
@@ -254,6 +261,16 @@ def _open_image(path: Path | None, size: Tuple[int, int] | None = None, contain:
         return img
     except Exception:
         return None
+
+
+def _avatar_circle(path: Path | None, size: int) -> Image.Image | None:
+    avatar = _open_image(path, (size, size), contain=False)
+    if not avatar:
+        return None
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    avatar.putalpha(mask)
+    return avatar
 
 
 def _cover_image(path: Path | None, size: Tuple[int, int]) -> Image.Image | None:
@@ -459,6 +476,114 @@ def _draw_character_card(draw: ImageDraw.ImageDraw, char: Dict[str, Any], index:
         _text(draw, (col_x, row_y), line, (220, 226, 238), FONT_TEXT)
 
 
+def _draw_profile_list_card(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], fill: Color = (16, 26, 42), outline: Color = (74, 92, 124)) -> None:
+    _rounded_r(draw, box, 12, (*fill, 214), (*outline, 190), 1)
+
+
+def _draw_rank_sprite(img: Image.Image, char: Dict[str, Any], x: int, y: int, size: int) -> None:
+    path = _resource_path("character", "imgs", "dmg-rank-bg.png")
+    sprite = _open_image(path)
+    if sprite:
+        frame_w = sprite.width // 5
+        crop = sprite.crop((frame_w * 4, 0, frame_w * 5, sprite.height)).resize((size, size), Image.Resampling.LANCZOS)
+        img.alpha_composite(crop, (x, y))
+    draw = ImageDraw.Draw(img)
+    text = "最强" if _char_star(char) >= 5 else "最高分"
+    tw = draw.textbbox((0, 0), text, font=FONT_PROFILE_CONS)[2]
+    _text(draw, (x + (size - tw) // 2, y + size - 24), text, (255, 238, 212), FONT_PROFILE_CONS)
+
+
+def _draw_profile_avatar(img: Image.Image, draw: ImageDraw.ImageDraw, char: Dict[str, Any], x: int, y: int, is_new: bool) -> None:
+    name = _char_name(char)
+    size = 72
+    face = _avatar_circle(_char_face_path(name), size)
+    draw.ellipse((x, y, x + size, y + size), fill=_star_color(_char_star(char)), outline=(255, 255, 255), width=2)
+    if face:
+        img.alpha_composite(face, (x, y))
+    else:
+        _text(draw, (x + 25, y + 20), name[:1] or "?", (255, 245, 225), FONT_CARD_TITLE)
+    _draw_rank_sprite(img, char, x - 4, y - 3, size + 8)
+    name_text = _fit_text(name, 5)
+    cons = _safe(char.get("constellation"), "0")
+    ny = y + size + 9
+    name_x = x
+    if is_new:
+        draw.ellipse((x - 1, ny + 6, x + 8, ny + 15), fill=(144, 232, 0))
+        name_x += 11
+    _text(draw, (name_x, ny), name_text, (248, 248, 248), FONT_PROFILE_NAME)
+    nb = draw.textbbox((0, 0), name_text, font=FONT_PROFILE_NAME)
+    cons_x = name_x + (nb[2] - nb[0]) + 3
+    cons_color = (76, 184, 198) if str(cons) not in {"0", "-"} else (92, 98, 110)
+    if str(cons) == "6":
+        cons_color = (230, 70, 30)
+    _rounded_r(draw, (cons_x, ny + 5, cons_x + 19, ny + 23), 5, cons_color)
+    _text(draw, (cons_x + 6, ny + 5), str(cons), (255, 255, 255), FONT_PROFILE_CONS)
+
+
+def _draw_profile_list_image(result: PanelResult, characters: List[Dict[str, Any]], updated: bool) -> Image.Image:
+    width = 650
+    cols = 8
+    rows = max(1, (len(characters) + cols - 1) // cols)
+    header_h = 135
+    rank_h = 38
+    list_h = 22 + rows * 112 + 14
+    footer_h = 40
+    height = header_h + rank_h + list_h + footer_h + 50
+    img = Image.new("RGBA", (width, height), (10, 18, 32, 255))
+    bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
+    if bg:
+        img.alpha_composite(bg)
+    img.alpha_composite(Image.new("RGBA", (width, height), (4, 13, 30, 54)))
+    draw = ImageDraw.Draw(img)
+
+    _text(draw, (28, 28), "#面板列表", (255, 255, 255), FONT_PROFILE_TITLE)
+    _text(draw, (228, 53), f"UID:{result.uid}", (255, 255, 255), FONT_PROFILE_UID)
+    msg = "获取角色面板数据成功" if updated else "当前已缓存角色面板数据"
+    _text(draw, (30, 83), msg, (255, 255, 255), FONT_PROFILE_LABEL)
+    demo = _char_name(characters[0]) if characters else "角色"
+    _text(draw, (30, 107), "你可以使用", (255, 255, 255), FONT_PROFILE_LABEL)
+    _text(draw, (118, 107), f"#{demo}面板", (246, 199, 74), FONT_PROFILE_LABEL)
+    _text(draw, (212, 107), "、", (255, 255, 255), FONT_PROFILE_LABEL)
+    _text(draw, (230, 107), f"#{demo}伤害", (246, 199, 74), FONT_PROFILE_LABEL)
+    _text(draw, (324, 107), "、", (255, 255, 255), FONT_PROFILE_LABEL)
+    _text(draw, (342, 107), f"#{demo}圣遗物", (246, 199, 74), FONT_PROFILE_LABEL)
+    _text(draw, (454, 107), "命令来查看面板信息了", (255, 255, 255), FONT_PROFILE_LABEL)
+
+    y = header_h
+    _draw_profile_list_card(draw, (10, y, width - 10, y + rank_h), (14, 24, 39), (81, 98, 132))
+    icon = _open_image(_resource_path("character", "imgs", "mark-icon.png"))
+    if icon:
+        img.alpha_composite(icon.crop((0, 0, 16, 16)), (28, y + 11))
+        img.alpha_composite(icon.crop((16, 0, 32, 16)), (123, y + 11))
+    else:
+        draw.ellipse((28, y + 12, 42, y + 26), fill=(244, 68, 58))
+        draw.ellipse((124, y + 12, 138, y + 26), fill=(247, 185, 53))
+    _text(draw, (48, y + 8), "综合练度排名", (255, 255, 255), FONT_PROFILE_LABEL)
+    _text(draw, (144, y + 8), "圣遗物评分排名", (255, 255, 255), FONT_PROFILE_LABEL)
+    time_text = datetime.now().strftime("%m-%d %H:%M")
+    _text(draw, (264, y + 10), f"排名：本群内 {time_text} 后，通过 #面板 命令查看过的角色数据", (170, 178, 193), FONT_PROFILE_SMALL)
+
+    y += rank_h + 6
+    _draw_profile_list_card(draw, (10, y, width - 10, y + list_h + footer_h), (18, 33, 50), (84, 102, 136))
+    start_x = 28
+    start_y = y + 18
+    for idx, char in enumerate(characters):
+        col = idx % cols
+        row = idx // cols
+        _draw_profile_avatar(img, draw, char, start_x + col * 75, start_y + row * 112, updated)
+    footer_y = y + list_h
+    draw.rectangle((10, footer_y, width - 10, footer_y + footer_h), fill=(0, 0, 0, 92))
+    draw.ellipse((28, footer_y + 16, 37, footer_y + 25), fill=(144, 232, 0))
+    _text(draw, (42, footer_y + 10), "本次更新角色" if updated else "已缓存角色", (255, 255, 255), FONT_PROFILE_LABEL)
+    serv = f"当前更新服务：{_source_display_name(result.source)}"
+    sb = draw.textbbox((0, 0), serv, font=FONT_PROFILE_LABEL)
+    _text(draw, (width - 28 - (sb[2] - sb[0]), footer_y + 10), serv, (255, 255, 255), FONT_PROFILE_LABEL)
+    credit = "Created By TRSS-Yunzai 3.1.7  &  Miao-Plugin 2.5.16"
+    cb = draw.textbbox((0, 0), credit, font=FONT_PROFILE_LABEL)
+    _text(draw, ((width - (cb[2] - cb[0])) // 2, height - 32), credit, (255, 255, 255), FONT_PROFILE_LABEL)
+    return img
+
+
 def _char_name(char: Dict[str, Any]) -> str:
     avatar_id = char.get("avatar_id") or char.get("avatarId")
     try:
@@ -519,6 +644,43 @@ def _char_image(name: str, kind: str = "splash") -> Path | None:
         if path:
             return path
     return None
+
+
+def _char_face_path(name: str) -> Path | None:
+    for file in ("face-q.webp", "face.webp", "card.webp", "side.webp"):
+        path = _resource_path("meta-gs", "character", name, "imgs", file)
+        if path:
+            return path
+    return None
+
+
+def _char_star(char: Dict[str, Any]) -> int:
+    for key in ("rarity", "star", "rank"):
+        try:
+            value = int(char.get(key) or 0)
+            if value:
+                return value
+        except (TypeError, ValueError):
+            pass
+    data = _char_meta(_char_name(char))
+    try:
+        return int(data.get("star") or data.get("rarity") or 5)
+    except (TypeError, ValueError):
+        return 5
+
+
+def _source_display_name(source: str) -> str:
+    text = str(source or "").strip()
+    key = text.lower()
+    if key in {"minigg", "mgg", "minigg-api", "minigg_api"}:
+        return "MiniGG-Api"
+    if key in {"miao", "miao-api", "miao_api"}:
+        return "Miao-Api"
+    if key in {"enka", "enka-api", "enka_api"}:
+        return "Enka-Api"
+    if key in {"mys", "mihoyo", "hoyolab", "米游社"}:
+        return "米游社"
+    return text or "MiniGG-Api"
 
 
 def _find_named_resource(base: str, name: str, filename: str) -> Path | None:
@@ -1027,6 +1189,12 @@ def _crop_panel_canvas(img: Image.Image, content_bottom: int, footer: str) -> Im
     return cropped
 
 
+async def render_panel_list_image(result: PanelResult, updated: bool = False) -> bytes:
+    characters = list(_iter_cards(result.characters or result.avatars or []))[:32]
+    img = _draw_profile_list_image(result, characters, updated)
+    return await convert_img(img)
+
+
 async def render_panel_image(result: PanelResult) -> bytes:
     characters = list(_iter_cards((result.characters or [])[:8]))
     if len(characters) == 1:
@@ -1038,48 +1206,7 @@ async def render_panel_image(result: PanelResult) -> bytes:
         img = _crop_panel_canvas(img, bottom, "Created by gscore_miao-plugin · layout inspired by miao-plugin")
         return await convert_img(img)
 
-    card_count = max(len(characters), 1)
-    cols = 2
-    rows = (card_count + cols - 1) // cols
-    width = 1440
-    header_h = 220
-    card_w = 650
-    card_h = 260
-    gap = 32
-    footer_h = 86
-    height = header_h + rows * card_h + max(rows - 1, 0) * gap + footer_h + 60
-
-    img = _gradient_bg(width, height).convert("RGBA")
-    draw = ImageDraw.Draw(img)
-
-    draw.ellipse((width - 420, -260, width + 180, 330), fill=(83, 112, 181, 55))
-    draw.ellipse((-220, height - 360, 360, height + 180), fill=(231, 184, 99, 35))
-
-    _text(draw, (64, 48), "喵喵角色面板", (255, 247, 220), FONT_TITLE)
-    info = f"UID {result.uid}  ·  数据源 {result.source}"
-    if result.nickname:
-        info += f"  ·  {result.nickname}"
-    if result.level is not None:
-        info += f"  Lv.{result.level}"
-    _text(draw, (68, 116), info, (199, 210, 230), FONT_SUBTITLE)
-    if result.signature:
-        _text(draw, (68, 154), result.signature[:58], (158, 171, 199), FONT_SMALL)
-
-    if not characters:
-        _rounded(draw, (64, header_h, width - 64, header_h + 180), (31, 39, 61), (70, 83, 120))
-        _text(draw, (104, header_h + 58), "当前数据源没有返回可渲染的角色详情。", (248, 244, 232), FONT_CARD_TITLE)
-        _text(draw, (104, header_h + 104), "请确认 Enka 展柜角色已公开，或切换 Miao/米游社数据源后重试。", (190, 201, 221), FONT_TEXT)
-    else:
-        for idx, char in enumerate(characters, start=1):
-            col = (idx - 1) % cols
-            row = (idx - 1) // cols
-            x = 64 + col * (card_w + gap)
-            y = header_h + row * (card_h + gap)
-            _draw_character_card(draw, char, idx, x, y, card_w, card_h)
-
-    footer = "Generated by gscore_miao-plugin · miao-plugin panel template for GsCore"
-    _text(draw, (64, height - 62), footer, (145, 158, 186), FONT_SMALL)
-    return await convert_img(img)
+    return await render_panel_list_image(result, False)
 
 
 async def render_single_panel_image(result: PanelResult, character_query: str = "") -> bytes:

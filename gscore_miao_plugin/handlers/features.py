@@ -12,6 +12,7 @@ from ..damage_service import render_damage_text
 from ..panel_cache import clear_cached_panel
 from ..panel_renderer import (render_artifact_image,
                               render_artifact_list_image, render_panel_image,
+                              render_panel_list_image,
                               render_single_panel_image)
 from ..panel_service import query_panel, render_panel_text
 from ..settings import merge_user_cfg
@@ -206,7 +207,10 @@ async def send_panel_update(bot: Bot, ev: Event):
     clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid)
     if result:
-        await bot.send(f"面板已刷新：{uid}\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}")
+        try:
+            await bot.send(await render_panel_list_image(result, updated=True))
+        except Exception as e:
+            await bot.send(f"面板已刷新：{uid}\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
 @sv_feature.on_regex(r"^(删除面板|解绑UID|解绑uid)\s*(?P<uid>\d{9,10})?$", block=True)

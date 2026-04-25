@@ -1,6 +1,14 @@
-PLUGIN_VERSION = "0.14.6"
+PLUGIN_VERSION = "0.14.7"
 
 CHANGELOGS = [
+    {
+        "version": "0.14.7",
+        "date": "2026-04-25",
+        "items": [
+            "喵喵更新面板刷新成功后改为输出 Yunzai miao-plugin profile-list 风格图片",
+            "面板列表复用 miao-plugin 星空背景、排名图标、圆形头像、命座角标和本次更新角色标记布局",
+        ],
+    },
     {
         "version": "0.14.6",
         "date": "2026-04-25",
