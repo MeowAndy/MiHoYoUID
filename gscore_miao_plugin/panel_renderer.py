@@ -518,16 +518,16 @@ def _draw_profile_avatar(img: Image.Image, draw: ImageDraw.ImageDraw, char: Dict
     name = _char_name(char)
     size = 82
     face = _avatar_circle(_char_face_path(name), size)
+    rank_bg_y = y + size - 27
+    draw.ellipse((x - 3, rank_bg_y - 5, x + size + 3, rank_bg_y + 31), fill=(227, 125, 47))
     draw.ellipse((x, y, x + size, y + size), fill=_star_color(_char_star(char)), outline=(255, 255, 255), width=2)
     if face:
         img.alpha_composite(face, (x, y))
     else:
         _text(draw, (x + 25, y + 20), name[:1] or "?", (255, 245, 225), FONT_CARD_TITLE)
-    rank_bg_y = y + size
-    draw.ellipse((x - 2, rank_bg_y - 6, x + size + 2, rank_bg_y + 32), fill=(227, 125, 47))
     text = "最强" if _char_star(char) >= 5 else "最高分"
     tb = draw.textbbox((0, 0), text, font=FONT_PROFILE_CONS)
-    _text(draw, (x + (size - (tb[2] - tb[0])) // 2, rank_bg_y - 2), text, (255, 255, 255), FONT_PROFILE_CONS)
+    _text(draw, (x + (size - (tb[2] - tb[0])) // 2, y + size - 23), text, (255, 255, 255), FONT_PROFILE_CONS)
     name_text = _fit_text(name, 5)
     cons = _safe(char.get("constellation"), "0")
     ny = y + size + 7
