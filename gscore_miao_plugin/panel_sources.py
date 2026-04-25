@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode, urljoin
 
 import httpx
+from gsuid_core.utils.api.mys_api import mys_api
 
 from .config import MiaoConfig
 from .panel_cache import get_cached_panel, set_cached_panel
@@ -388,6 +389,16 @@ def _is_mys_dead_code(raw: Dict[str, Any]) -> bool:
     return _retcode(raw) in {10035, 5003, 10041, 1034, "10035", "5003", "10041", "1034"}
 
 
+def _mys_code_message(code: Any) -> str:
+    messages = {
+        -51: "米游社 Cookie 未配置或不可用",
+        -999: "米游社风控验证失败，请稍后重试或检查 Cookie/设备指纹",
+        1034: "米游社风控验证失败，请稍后重试或检查 Cookie/设备指纹",
+        "1034": "米游社风控验证失败，请稍后重试或检查 Cookie/设备指纹",
+    }
+    return messages.get(code, f"接口返回 {code}")
+
+
 def _add_mys_challenge_headers(headers: Dict[str, str], q: str = "", b: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     fixed = dict(headers)
     fixed["x-rpc-challenge_game"] = "2"
@@ -637,6 +648,34 @@ class MysPanelSource(BasePanelSource):
     def __init__(self, cookie: str = ""):
         self.cookie = cookie
 
+    async def _fetch_with_gscore_api(self, uid: str, cookie: str) -> PanelResult:
+        index_data = await mys_api.get_info(uid, cookie)
+        if not isinstance(index_data, dict):
+            raise PanelSourceError(self.source_name, _mys_code_message(index_data))
+
+        avatars = index_data.get("avatars") if isinstance(index_data, dict) else []
+        character_ids = [x.get("id") for x in avatars if isinstance(x, dict) and x.get("id")]
+        detail_data: Dict[str, Any] = {}
+        if character_ids:
+            detail_ret = await mys_api.get_character(uid, character_ids, cookie)
+            if not isinstance(detail_ret, dict):
+                raise PanelSourceError(self.source_name, _mys_code_message(detail_ret))
+            detail_data = detail_ret
+
+        data = deepcopy(index_data)
+        if isinstance(detail_data.get("list"), list):
+            data["avatars"] = detail_data["list"]
+        return PanelResult(
+            source=self.source_name,
+            uid=uid,
+            raw={"index": {"retcode": 0, "data": index_data}, "detail": {"retcode": 0, "data": detail_data}},
+            nickname=str((data.get("role") or {}).get("nickname") or ""),
+            level=(data.get("role") or {}).get("level"),
+            signature="",
+            avatars=data.get("avatars") or [],
+            characters=_characters_from_mys_avatars(data.get("avatars") or []),
+        )
+
     async def _get_json_with_retry(
         self,
         client: httpx.AsyncClient,
@@ -681,6 +720,15 @@ class MysPanelSource(BasePanelSource):
         cookie = self.cookie or str(MiaoConfig.get_config("MysCookie").data or "").strip()
         if not cookie:
             raise PanelSourceError(self.source_name, "米游社 Cookie 未配置")
+
+        try:
+            result = await self._fetch_with_gscore_api(uid, cookie)
+            set_cached_panel(self.source_name, uid, result)
+            return result
+        except PanelSourceError:
+            raise
+        except Exception as e:
+            raise PanelSourceError(self.source_name, f"米游社请求失败：{e}") from e
 
         server = _server_id(uid)
         index_params = {"role_id": uid, "server": server}
