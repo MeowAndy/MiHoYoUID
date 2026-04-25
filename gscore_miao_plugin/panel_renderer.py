@@ -182,13 +182,19 @@ WEAPON_PROP_NAME_MAP: Dict[str, str] = {
 }
 
 
-def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = [
+def _font(size: int, bold: bool = False, miao: str = "") -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = []
+    if miao:
+        candidates.extend([
+            str(Path(__file__).resolve().parents[1].parent / "miao-plugin" / "resources" / "common" / "font" / miao),
+            str(Path("E:/gsuid_core/gsuid_core/plugins/miao-plugin/resources/common/font") / miao),
+        ])
+    candidates.extend([
         "msyhbd.ttc" if bold else "msyh.ttc",
         "Microsoft YaHei UI Bold.ttf" if bold else "Microsoft YaHei UI.ttf",
         "simhei.ttf",
         "arial.ttf",
-    ]
+    ])
     for name in candidates:
         try:
             return ImageFont.truetype(name, size=size)
@@ -207,16 +213,23 @@ FONT_HELP_TITLE = _font(48, True)
 FONT_HELP_GROUP = _font(28, True)
 FONT_HELP_CMD = _font(22, True)
 FONT_HELP_DESC = _font(16)
-FONT_PROFILE_TITLE = _font(44, True)
-FONT_PROFILE_UID = _font(22, True)
-FONT_PROFILE_LABEL = _font(18, True)
-FONT_PROFILE_SMALL = _font(13)
-FONT_PROFILE_NAME = _font(20, True)
-FONT_PROFILE_CONS = _font(13, True)
+FONT_PROFILE_TITLE = _font(42, True, "NZBZ.ttf")
+FONT_PROFILE_UID = _font(21, True, "NZBZ.ttf")
+FONT_PROFILE_LABEL = _font(18, True, "HYWH-65W.ttf")
+FONT_PROFILE_SMALL = _font(13, False, "HYWH-65W.ttf")
+FONT_PROFILE_NAME = _font(18, True, "HYWH-65W.ttf")
+FONT_PROFILE_CONS = _font(12, True, "HYWH-65W.ttf")
+FONT_PROFILE_CREDIT = _font(18, True, "NZBZ.ttf")
 
 
 def _text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill: Color, font: ImageFont.ImageFont) -> None:
     draw.text(xy, str(text), fill=fill, font=font)
+
+
+def _shadow_text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill: Color, font: ImageFont.ImageFont, shadow: Color = (0, 0, 0)) -> None:
+    x, y = xy
+    draw.text((x + 2, y + 2), str(text), fill=shadow, font=font)
+    draw.text((x, y), str(text), fill=fill, font=font)
 
 
 def _plugin_root() -> Path:
@@ -264,9 +277,17 @@ def _open_image(path: Path | None, size: Tuple[int, int] | None = None, contain:
 
 
 def _avatar_circle(path: Path | None, size: int) -> Image.Image | None:
-    avatar = _open_image(path, (size, size), contain=False)
-    if not avatar:
+    if not path or not path.exists():
         return None
+    try:
+        src = Image.open(path).convert("RGBA")
+    except Exception:
+        return None
+    scale = max(size / src.width, size / src.height)
+    avatar = src.resize((max(size, int(src.width * scale)), max(size, int(src.height * scale))), Image.Resampling.LANCZOS)
+    left = max((avatar.width - size) // 2, 0)
+    top = max((avatar.height - size) // 2, 0)
+    avatar = avatar.crop((left, top, left + size, top + size))
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
     avatar.putalpha(mask)
@@ -485,17 +506,17 @@ def _draw_rank_sprite(img: Image.Image, char: Dict[str, Any], x: int, y: int, si
     sprite = _open_image(path)
     if sprite:
         frame_w = sprite.width // 5
-        crop = sprite.crop((frame_w * 4, 0, frame_w * 5, sprite.height)).resize((size, size), Image.Resampling.LANCZOS)
+        crop = sprite.crop((frame_w * 4, 0, frame_w * 5, sprite.height)).resize((size, size), Image.Resampling.BICUBIC)
         img.alpha_composite(crop, (x, y))
     draw = ImageDraw.Draw(img)
     text = "最强" if _char_star(char) >= 5 else "最高分"
     tw = draw.textbbox((0, 0), text, font=FONT_PROFILE_CONS)[2]
-    _text(draw, (x + (size - tw) // 2, y + size - 24), text, (255, 238, 212), FONT_PROFILE_CONS)
+    _shadow_text(draw, (x + (size - tw) // 2, y + size - 23), text, (255, 238, 212), FONT_PROFILE_CONS)
 
 
 def _draw_profile_avatar(img: Image.Image, draw: ImageDraw.ImageDraw, char: Dict[str, Any], x: int, y: int, is_new: bool) -> None:
     name = _char_name(char)
-    size = 72
+    size = 82
     face = _avatar_circle(_char_face_path(name), size)
     draw.ellipse((x, y, x + size, y + size), fill=_star_color(_char_star(char)), outline=(255, 255, 255), width=2)
     if face:
@@ -505,30 +526,31 @@ def _draw_profile_avatar(img: Image.Image, draw: ImageDraw.ImageDraw, char: Dict
     _draw_rank_sprite(img, char, x - 4, y - 3, size + 8)
     name_text = _fit_text(name, 5)
     cons = _safe(char.get("constellation"), "0")
-    ny = y + size + 9
+    ny = y + size + 7
     name_x = x
     if is_new:
-        draw.ellipse((x - 1, ny + 6, x + 8, ny + 15), fill=(144, 232, 0))
+        draw.ellipse((x - 1, ny + 7, x + 9, ny + 17), fill=(144, 232, 0))
         name_x += 11
-    _text(draw, (name_x, ny), name_text, (248, 248, 248), FONT_PROFILE_NAME)
+    _shadow_text(draw, (name_x, ny), name_text, (248, 248, 248), FONT_PROFILE_NAME)
     nb = draw.textbbox((0, 0), name_text, font=FONT_PROFILE_NAME)
     cons_x = name_x + (nb[2] - nb[0]) + 3
     cons_color = (76, 184, 198) if str(cons) not in {"0", "-"} else (92, 98, 110)
     if str(cons) == "6":
         cons_color = (230, 70, 30)
-    _rounded_r(draw, (cons_x, ny + 5, cons_x + 19, ny + 23), 5, cons_color)
+    _rounded_r(draw, (cons_x, ny + 5, cons_x + 20, ny + 23), 5, cons_color)
     _text(draw, (cons_x + 6, ny + 5), str(cons), (255, 255, 255), FONT_PROFILE_CONS)
 
 
 def _draw_profile_list_image(result: PanelResult, characters: List[Dict[str, Any]], updated: bool) -> Image.Image:
-    width = 650
+    scale = 1.6
+    width = 1040
     cols = 8
     rows = max(1, (len(characters) + cols - 1) // cols)
-    header_h = 135
-    rank_h = 38
-    list_h = 22 + rows * 112 + 14
-    footer_h = 40
-    height = header_h + rank_h + list_h + footer_h + 50
+    header_h = 178
+    rank_h = 58
+    list_h = 34 + rows * 145 + 22
+    footer_h = 56
+    height = header_h + rank_h + list_h + footer_h + 74
     img = Image.new("RGBA", (width, height), (10, 18, 32, 255))
     bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
     if bg:
@@ -536,51 +558,52 @@ def _draw_profile_list_image(result: PanelResult, characters: List[Dict[str, Any
     img.alpha_composite(Image.new("RGBA", (width, height), (4, 13, 30, 54)))
     draw = ImageDraw.Draw(img)
 
-    _text(draw, (28, 28), "#面板列表", (255, 255, 255), FONT_PROFILE_TITLE)
-    _text(draw, (228, 53), f"UID:{result.uid}", (255, 255, 255), FONT_PROFILE_UID)
+    _shadow_text(draw, (48, 32), "#面板列表", (255, 255, 255), FONT_PROFILE_TITLE)
+    _shadow_text(draw, (332, 70), f"UID:{result.uid}", (255, 255, 255), FONT_PROFILE_UID)
     msg = "获取角色面板数据成功" if updated else "当前已缓存角色面板数据"
-    _text(draw, (30, 83), msg, (255, 255, 255), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (49, 105), msg, (255, 255, 255), FONT_PROFILE_LABEL)
     demo = _char_name(characters[0]) if characters else "角色"
-    _text(draw, (30, 107), "你可以使用", (255, 255, 255), FONT_PROFILE_LABEL)
-    _text(draw, (118, 107), f"#{demo}面板", (246, 199, 74), FONT_PROFILE_LABEL)
-    _text(draw, (212, 107), "、", (255, 255, 255), FONT_PROFILE_LABEL)
-    _text(draw, (230, 107), f"#{demo}伤害", (246, 199, 74), FONT_PROFILE_LABEL)
-    _text(draw, (324, 107), "、", (255, 255, 255), FONT_PROFILE_LABEL)
-    _text(draw, (342, 107), f"#{demo}圣遗物", (246, 199, 74), FONT_PROFILE_LABEL)
-    _text(draw, (454, 107), "命令来查看面板信息了", (255, 255, 255), FONT_PROFILE_LABEL)
+    hint_y = 132
+    _shadow_text(draw, (49, hint_y), "你可以使用", (255, 255, 255), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (161, hint_y), f"#{demo}面板", (246, 199, 74), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (293, hint_y), "、", (255, 255, 255), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (318, hint_y), f"#{demo}伤害", (246, 199, 74), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (450, hint_y), "、", (255, 255, 255), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (475, hint_y), f"#{demo}圣遗物", (246, 199, 74), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (628, hint_y), "命令来查看面板信息了", (255, 255, 255), FONT_PROFILE_LABEL)
 
     y = header_h
-    _draw_profile_list_card(draw, (10, y, width - 10, y + rank_h), (14, 24, 39), (81, 98, 132))
+    _draw_profile_list_card(draw, (16, y, width - 16, y + rank_h), (14, 24, 39), (81, 98, 132))
     icon = _open_image(_resource_path("character", "imgs", "mark-icon.png"))
     if icon:
-        img.alpha_composite(icon.crop((0, 0, 16, 16)), (28, y + 11))
-        img.alpha_composite(icon.crop((16, 0, 32, 16)), (123, y + 11))
+        img.alpha_composite(icon.crop((0, 0, 16, 16)).resize((22, 22), Image.Resampling.BICUBIC), (42, y + 18))
+        img.alpha_composite(icon.crop((16, 0, 32, 16)).resize((22, 22), Image.Resampling.BICUBIC), (196, y + 18))
     else:
-        draw.ellipse((28, y + 12, 42, y + 26), fill=(244, 68, 58))
-        draw.ellipse((124, y + 12, 138, y + 26), fill=(247, 185, 53))
-    _text(draw, (48, y + 8), "综合练度排名", (255, 255, 255), FONT_PROFILE_LABEL)
-    _text(draw, (144, y + 8), "圣遗物评分排名", (255, 255, 255), FONT_PROFILE_LABEL)
+        draw.ellipse((42, y + 19, 63, y + 40), fill=(244, 68, 58))
+        draw.ellipse((196, y + 19, 217, y + 40), fill=(247, 185, 53))
+    _text(draw, (71, y + 17), "综合练度排名", (255, 255, 255), FONT_PROFILE_LABEL)
+    _text(draw, (225, y + 17), "圣遗物评分排名", (255, 255, 255), FONT_PROFILE_LABEL)
     time_text = datetime.now().strftime("%m-%d %H:%M")
-    _text(draw, (264, y + 10), f"排名：本群内 {time_text} 后，通过 #面板 命令查看过的角色数据", (170, 178, 193), FONT_PROFILE_SMALL)
+    _text(draw, (388, y + 21), f"排名：本群内 {time_text} 后，通过 #面板 命令查看过的角色数据", (170, 178, 193), FONT_PROFILE_SMALL)
 
-    y += rank_h + 6
-    _draw_profile_list_card(draw, (10, y, width - 10, y + list_h + footer_h), (18, 33, 50), (84, 102, 136))
-    start_x = 28
-    start_y = y + 18
+    y += rank_h + 10
+    _draw_profile_list_card(draw, (16, y, width - 16, y + list_h + footer_h), (18, 33, 50), (84, 102, 136))
+    start_x = 43
+    start_y = y + 26
     for idx, char in enumerate(characters):
         col = idx % cols
         row = idx // cols
-        _draw_profile_avatar(img, draw, char, start_x + col * 75, start_y + row * 112, updated)
+        _draw_profile_avatar(img, draw, char, start_x + col * 123, start_y + row * 145, updated)
     footer_y = y + list_h
-    draw.rectangle((10, footer_y, width - 10, footer_y + footer_h), fill=(0, 0, 0, 92))
-    draw.ellipse((28, footer_y + 16, 37, footer_y + 25), fill=(144, 232, 0))
-    _text(draw, (42, footer_y + 10), "本次更新角色" if updated else "已缓存角色", (255, 255, 255), FONT_PROFILE_LABEL)
+    draw.rectangle((16, footer_y, width - 16, footer_y + footer_h), fill=(0, 0, 0, 126))
+    draw.ellipse((43, footer_y + 21, 56, footer_y + 34), fill=(144, 232, 0))
+    _shadow_text(draw, (63, footer_y + 14), "本次更新角色" if updated else "已缓存角色", (255, 255, 255), FONT_PROFILE_LABEL)
     serv = f"当前更新服务：{_source_display_name(result.source)}"
     sb = draw.textbbox((0, 0), serv, font=FONT_PROFILE_LABEL)
-    _text(draw, (width - 28 - (sb[2] - sb[0]), footer_y + 10), serv, (255, 255, 255), FONT_PROFILE_LABEL)
+    _shadow_text(draw, (width - 48 - (sb[2] - sb[0]), footer_y + 14), serv, (255, 255, 255), FONT_PROFILE_LABEL)
     credit = "Created By TRSS-Yunzai 3.1.7  &  Miao-Plugin 2.5.16"
-    cb = draw.textbbox((0, 0), credit, font=FONT_PROFILE_LABEL)
-    _text(draw, ((width - (cb[2] - cb[0])) // 2, height - 32), credit, (255, 255, 255), FONT_PROFILE_LABEL)
+    cb = draw.textbbox((0, 0), credit, font=FONT_PROFILE_CREDIT)
+    _shadow_text(draw, ((width - (cb[2] - cb[0])) // 2, height - 42), credit, (255, 255, 255), FONT_PROFILE_CREDIT)
     return img
 
 
