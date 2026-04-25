@@ -223,7 +223,7 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     ),
     "MiaoPluginResourcePath": GsStrConfig(
         "外部miao-plugin资源目录",
-        "可选兼容项：默认优先使用本插件内置 resources；仅需额外覆盖或补充角色立绘、武器、圣遗物素材时填写本地 miao-plugin 目录",
+        "可选兼容项：默认使用本插件内置适配资源；仅在调试或覆盖素材时填写本地 miao-plugin 目录",
         "",
     ),
     "AllowGuestUse": GsBoolConfig(

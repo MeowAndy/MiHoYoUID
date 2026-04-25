@@ -1386,7 +1386,7 @@ async def render_artifact_list_image(result: PanelResult) -> bytes:
         _text(draw, (300, y + 14), " / ".join(f"{x:.1f}" for x in scores[:5]) or "无圣遗物", (190, 201, 221), FONT_TINY)
         _text(draw, (650, y + 12), f"{total:.1f} [{artifact_rank(total)}]", (144, 232, 74), FONT_TEXT)
         _text(draw, (120, y + 38), _fit_text(title, 28), (160, 171, 190), FONT_TINY)
-    _text(draw, (54, height - 42), "评分权重读取本地 miao-plugin resources/meta-gs/artifact/artis-mark.js", (145, 158, 186), FONT_TINY)
+    _text(draw, (54, height - 42), "评分权重使用 gscore_miao-plugin 内置适配规则", (145, 158, 186), FONT_TINY)
     return await convert_img(img)
 
 

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import re
-from functools import lru_cache
 from typing import Any, Dict, List, Tuple
 
 from .alias_data import resolve_alias
 from .panel_models import PanelResult
-from .panel_renderer import CHARACTER_ID_NAMES, _resource_path
+from .panel_renderer import CHARACTER_ID_NAMES
 
 DEFAULT_WEIGHT = {"atk": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "phy": 100}
 
@@ -38,30 +36,6 @@ CHARACTER_WEIGHTS: Dict[str, Dict[str, float]] = {
     "阿蕾奇诺": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 75, "dmg": 100, "recharge": 30},
     "玛薇卡": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 85, "dmg": 100},
 }
-
-
-@lru_cache(maxsize=1)
-def _upstream_weights() -> Dict[str, Dict[str, float]]:
-    """读取 Yunzai miao-plugin 的 resources/meta-gs/artifact/artis-mark.js。"""
-    path = _resource_path("meta-gs", "artifact", "artis-mark.js")
-    if not path or not path.exists():
-        return {}
-    try:
-        text = path.read_text(encoding="utf-8")
-    except Exception:
-        return {}
-    weights: Dict[str, Dict[str, float]] = {}
-    pattern = re.compile(r"^\s*([^\n:{},]+)\s*:\s*\{([^{}]+)\}\s*,?\s*$", re.M)
-    for match in pattern.finditer(text):
-        name = match.group(1).strip().strip("'\"")
-        body = match.group(2)
-        item: Dict[str, float] = {}
-        for key, value in re.findall(r"(hp|atk|def|cpct|cdmg|mastery|dmg|phy|recharge|heal)\s*:\s*(-?\d+(?:\.\d+)?)", body):
-            item[key] = float(value)
-        if name and item:
-            weights[name] = item
-    return weights
-
 PROP_KEY_MAP = {
     "FIGHT_PROP_HP": "hp",
     "FIGHT_PROP_HP_PERCENT": "hp",
@@ -230,10 +204,9 @@ def _artifact_pos_index(reliq: Dict[str, Any], fallback_idx: int = 0) -> int:
 def _weight_for_char(char: Dict[str, Any]) -> Tuple[str, Dict[str, float]]:
     name = _char_name(char)
     weight = dict(DEFAULT_WEIGHT)
-    upstream = _upstream_weights().get(name)
-    weight.update(upstream or CHARACTER_WEIGHTS.get(name, {}))
+    weight.update(CHARACTER_WEIGHTS.get(name, {}))
 
-    # 对齐 miao-plugin ArtisMarkCfg 的常见动态规则。
+    # 使用本插件适配后的常见动态评分规则。
     weapon_name = _weapon_name(char)
     refine = max(min(_weapon_refine(char), 5), 1)
     sets = _artifact_sets(char)

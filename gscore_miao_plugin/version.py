@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.14.8"
+PLUGIN_VERSION = "0.14.9"
 
 CHANGELOGS = [
+    {
+        "version": "0.14.9",
+        "date": "2026-04-25",
+        "items": [
+            "内置资源改为 gscore_miao-plugin 适配资源集，移除原版 miao-plugin 不使用的后台、抽卡、Wiki、星铁与大图目录",
+            "面板素材保留当前渲染链路需要的 common、character、help 与 meta-gs 图片/JSON 数据，外部 miao-plugin 目录仅作为可选覆盖",
+            "圣遗物评分不再运行时读取原版 artis-mark.js，改为使用插件内置 Python 评分权重与动态规则",
+        ],
+    },
     {
         "version": "0.14.8",
         "date": "2026-04-25",
@@ -146,7 +155,7 @@ CHANGELOGS = [
         "items": [
             "修复 Enka 数字武器 ID/nameTextMapHash 导致面板图武器名显示异常的问题",
             "兼容 Yunzai miao-plugin 的 weapon/<type>/data.json 聚合映射，按 item_id 反查具体武器目录与 icon.webp",
-            "武器名称与图标优先使用本地 miao-plugin resources/meta-gs/weapon 素材，进一步贴近原版面板资源链路",
+            "武器名称与图标优先使用本插件适配的 resources/meta-gs/weapon 素材，进一步贴近原版面板资源链路",
         ],
     },
     {
@@ -182,7 +191,7 @@ CHANGELOGS = [
         "version": "0.11.0",
         "date": "2026-04-25",
         "items": [
-            "迁移 Yunzai miao-plugin 的 resources/meta-gs/artifact/artis-mark.js 常用角色圣遗物评分权重",
+            "内置常用角色圣遗物评分权重",
             "圣遗物评分增加角色专属权重、绝缘4、西风武器、薙草高精等常见动态规则",
             "评分输出改为显示使用规则，并按 miao-plugin 风格 MAX/ACE/SSS/SS/S/A/B/C 档位划分",
         ],
