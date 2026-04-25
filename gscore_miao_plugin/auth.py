@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Dict
 
+from gsuid_core.config import core_config
 from gsuid_core.models import Event
 
 from .config import MiaoConfig
@@ -11,14 +12,22 @@ from .database import MiaoUserHistory
 
 def is_admin_event(ev: Event) -> bool:
     """兼容不同适配器字段的管理员判断。"""
-    return bool(
+    if bool(
         getattr(ev, "is_master", False)
         or getattr(ev, "isMaster", False)
         or getattr(ev, "is_admin", False)
         or getattr(ev, "isAdmin", False)
         or getattr(ev, "is_owner", False)
         or getattr(ev, "isOwner", False)
-    )
+    ):
+        return True
+
+    try:
+        masters = core_config.get_config("masters") or []
+    except Exception:
+        masters = []
+    user_id = str(getattr(ev, "user_id", "") or "")
+    return bool(user_id and user_id in {str(master) for master in masters})
 
 
 def can_use_plugin(ev: Event) -> bool:
