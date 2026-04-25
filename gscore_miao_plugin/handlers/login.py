@@ -13,8 +13,8 @@ from ..mys_service import (daily_sign, daily_sign_starrail, fetch_sign_info,
                            normalize_cookie, qrcode_login_cookie,
                            validate_cookie)
 from ..settings import merge_user_cfg
-from ..store import (bind_mys_cookie, get_user_cfg, set_group_bot_self_id,
-                     set_user_cfg, unbind_mys_cookie)
+from ..store import (bind_mys_cookie, bind_uid, get_user_cfg,
+                     set_group_bot_self_id, set_user_cfg, unbind_mys_cookie)
 
 sv_login = SV("GsCoreMiao登录签到")
 
@@ -55,6 +55,7 @@ def _role_uids(roles: list[dict], uid: str = "") -> list[str]:
 def get_sign_uids_for_cfg(cfg: dict, specified_uid: str = "") -> tuple[list[str], list[str]]:
     specified_uid = (specified_uid or "").strip()
     default_uid = str(cfg.get("uid") or "").strip()
+    default_sr_uid = str(cfg.get("sr_uid") or "").strip()
     gs_roles = cfg.get("mys_roles") or []
     sr_roles = cfg.get("mys_sr_roles") or []
     gs_uids = _role_uids(gs_roles, specified_uid)
@@ -63,6 +64,9 @@ def get_sign_uids_for_cfg(cfg: dict, specified_uid: str = "") -> tuple[list[str]
         if picked_uid:
             gs_uids = [picked_uid]
     sr_uids = _role_uids(sr_roles, specified_uid)
+    if not specified_uid and not sr_uids and default_sr_uid:
+        picked_sr_uid = _pick_role_uid(sr_roles, default_sr_uid)
+        sr_uids = [picked_sr_uid or default_sr_uid]
     return gs_uids, sr_uids
 
 
@@ -180,7 +184,12 @@ async def send_login_info(bot: Bot, ev: Event):
     sr_roles = cfg.get("mys_sr_roles") or []
     if not cookie:
         return await bot.send("当前未登录。请私聊发送：喵喵登录 <米游社Cookie>")
-    lines = ["【喵喵登录信息】", f"Cookie：{_mask_cookie(cookie)}", f"默认 UID：{cfg.get('uid') or '-'}"]
+    lines = [
+        "【喵喵登录信息】",
+        f"Cookie：{_mask_cookie(cookie)}",
+        f"原神默认 UID：{cfg.get('uid') or '-'}",
+        f"崩铁默认 UID：{cfg.get('sr_uid') or '-'}",
+    ]
     if roles:
         lines.append("绑定原神角色：")
         for idx, role in enumerate(roles[:8], start=1):
@@ -190,6 +199,20 @@ async def send_login_info(bot: Bot, ev: Event):
         for idx, role in enumerate(sr_roles[:8], start=1):
             lines.append(f"{idx}. {_role_name(role)} UID {_role_uid(role)} {_role_region(role)}")
     await bot.send("\n".join(lines))
+
+
+@sv_login.on_regex(r"^(崩铁|星铁)(设置uid|设置UID|绑定uid|绑定UID|绑定)\s*(?P<uid>\d{9,10})$", block=True)
+async def send_set_starrail_uid(bot: Bot, ev: Event):
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    uid = ((ev.regex_dict or {}).get("uid") or "").strip()
+    if not uid:
+        return await bot.send("请携带崩铁 UID，例如：喵喵崩铁设置uid 100000001")
+    cfg = await bind_uid(ev.user_id, ev.bot_id, uid, game="sr")
+    login_hint = ""
+    if not str(cfg.get("mys_cookie") or ""):
+        login_hint = "\n如需使用签到、后续米游社数据查询，请先使用：喵喵登录"
+    await bot.send(f"已绑定崩铁 UID：{uid}{login_hint}")
 
 
 @sv_login.on_fullmatch(("删除登录", "退出登录", "解绑cookie", "解绑Cookie"), block=True)

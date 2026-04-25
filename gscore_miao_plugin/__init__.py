@@ -25,6 +25,7 @@ except Exception:
 from .auto_sign import register_auto_daily_sign_job  # noqa: E402
 # handlers
 from .handlers import admin as _admin  # noqa: F401,E402
+from .handlers import calendar as _calendar  # noqa: F401,E402
 from .handlers import changelog as _changelog  # noqa: F401,E402
 from .handlers import features as _features  # noqa: F401,E402
 from .handlers import help as _help  # noqa: F401,E402

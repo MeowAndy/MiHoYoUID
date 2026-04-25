@@ -83,8 +83,9 @@ async def reset_user_cfg(user_id: str, bot_id: str) -> None:
             _save_json(data)
 
 
-async def bind_uid(user_id: str, bot_id: str, uid: str) -> Dict[str, Any]:
-    return await set_user_cfg(user_id, bot_id, {"uid": uid})
+async def bind_uid(user_id: str, bot_id: str, uid: str, game: str = "gs") -> Dict[str, Any]:
+    key = "sr_uid" if game in {"sr", "starrail", "hkrpg"} else "uid"
+    return await set_user_cfg(user_id, bot_id, {key: uid})
 
 
 async def bind_mys_cookie(
@@ -95,8 +96,10 @@ async def bind_mys_cookie(
     sr_roles: list[dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     sr_roles = sr_roles or []
-    default_role = (roles[0] if roles else sr_roles[0]) if (roles or sr_roles) else {}
+    default_role = roles[0] if roles else {}
+    default_sr_role = sr_roles[0] if sr_roles else {}
     default_uid = str(default_role.get("game_uid") or default_role.get("uid") or "") if default_role else ""
+    default_sr_uid = str(default_sr_role.get("game_uid") or default_sr_role.get("uid") or "") if default_sr_role else ""
     patch: Dict[str, Any] = {
         "mys_cookie": cookie,
         "mys_roles": roles,
@@ -106,6 +109,8 @@ async def bind_mys_cookie(
     }
     if default_uid:
         patch["uid"] = default_uid
+    if default_sr_uid:
+        patch["sr_uid"] = default_sr_uid
     return await set_user_cfg(user_id, bot_id, patch)
 
 

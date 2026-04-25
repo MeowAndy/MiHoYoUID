@@ -1475,3 +1475,46 @@ async def render_help_image(title: str, subtitle: str, groups: List[Dict[str, An
 
     _text(draw, (70, height - 48), "Created by gscore_miao-plugin · help card inspired by XutheringWavesUID & miao-plugin", (150, 163, 190), FONT_TINY)
     return await convert_img(img)
+
+
+async def render_calendar_image(cal_data: Dict[str, Any]) -> bytes:
+    items = list(cal_data.get("items") or [])
+    game = str(cal_data.get("game") or "sr")
+    title = "喵喵崩铁活动日历" if game == "sr" else "喵喵原神活动日历"
+    subtitle = "星穹铁道公告与跃迁日程" if game == "sr" else "原神公告与祈愿日程"
+    width = 1080
+    row_h = 92
+    height = max(720, 230 + max(len(items), 1) * row_h + 90)
+    img = _gradient_bg(width, height).convert("RGBA")
+    bg = _cover_image(_help_bg_path(), (width, height))
+    if bg:
+        bg.putalpha(80)
+        img.alpha_composite(bg)
+    img.alpha_composite(Image.new("RGBA", (width, height), (10, 14, 24, 145)))
+    draw = ImageDraw.Draw(img)
+    draw.ellipse((width - 360, -180, width + 160, 280), fill=(231, 184, 99, 58))
+    draw.ellipse((-220, 120, 320, 660), fill=(88, 123, 190, 42))
+    _text(draw, (64, 50), title, (255, 247, 222), FONT_HELP_TITLE)
+    _text(draw, (68, 116), subtitle, (220, 228, 244), FONT_SUBTITLE)
+    _text(draw, (68, 154), f"更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M')} · 数据来自米游社公告", (170, 182, 207), FONT_SMALL)
+
+    y = 220
+    if not items:
+        _rounded_r(draw, (64, y, width - 64, y + 120), 22, (28, 34, 54), (76, 91, 129), 1)
+        _text(draw, (96, y + 38), "暂未获取到当前活动日程", (248, 244, 232), FONT_HELP_CMD)
+    for item in items:
+        _rounded_r(draw, (64, y, width - 64, y + 72), 18, (28, 34, 54), (76, 91, 129), 1)
+        status = str(item.get("status") or "-")
+        type_name = str(item.get("type") or "活动")
+        tag_color = (84, 150, 255) if status == "进行中" else (228, 178, 86) if status == "未开始" else (130, 140, 160)
+        _rounded_r(draw, (86, y + 16, 190, y + 54), 12, tag_color, None)
+        _text(draw, (106, y + 23), status, (255, 255, 255), FONT_HELP_DESC)
+        _text(draw, (214, y + 12), _fit_text(str(item.get("title") or "活动"), 34), (248, 244, 232), FONT_HELP_CMD)
+        start = item.get("start")
+        end = item.get("end")
+        start_text = start.strftime("%m-%d %H:%M") if hasattr(start, "strftime") else str(start or "-")
+        end_text = end.strftime("%m-%d %H:%M") if hasattr(end, "strftime") else str(end or "-")
+        _text(draw, (216, y + 44), f"{type_name} · {start_text} ~ {end_text}", (185, 197, 220), FONT_HELP_DESC)
+        y += row_h
+    _text(draw, (64, height - 44), "提示：发送 日历列表 可查看更多公告条目", (150, 163, 190), FONT_TINY)
+    return await convert_img(img)
