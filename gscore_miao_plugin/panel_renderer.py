@@ -147,6 +147,25 @@ PROP_NAME_MAP: Dict[str, str] = {
     "FIGHT_PROP_WIND_ADD_HURT": "风伤加成",
     "FIGHT_PROP_ROCK_ADD_HURT": "岩伤加成",
     "FIGHT_PROP_ICE_ADD_HURT": "冰伤加成",
+    "speed": "速度",
+    "spd": "速度",
+    "break_effect": "击破特攻",
+    "breakEffect": "击破特攻",
+    "stance": "击破特攻",
+    "effect_hit": "效果命中",
+    "effectHitRate": "效果命中",
+    "effPct": "效果命中",
+    "effect_res": "效果抵抗",
+    "effectRes": "效果抵抗",
+    "effDef": "效果抵抗",
+    "energy_recharge": "能量恢复效率",
+    "recharge": "能量恢复效率",
+    "dmg": "伤害加成",
+    "cpct": "暴击率",
+    "cdmg": "暴击伤害",
+    "hp": "生命值",
+    "atk": "攻击力",
+    "def": "防御力",
 }
 
 WEAPON_PROP_NAME_MAP: Dict[str, str] = {
@@ -179,6 +198,10 @@ WEAPON_PROP_NAME_MAP: Dict[str, str] = {
     "dmg": "伤害",
     "phy": "物伤",
     "recharge": "充能",
+    "speed": "速度",
+    "stance": "击破",
+    "effPct": "命中",
+    "effDef": "抵抗",
     "heal": "治疗",
     "shield": "护盾",
 }
@@ -401,6 +424,29 @@ def _find_artifact_by_item_id(item_id: str) -> Dict[str, Any]:
             if isinstance(item, dict) and str(item.get("id") or "") in targets:
                 return {
                     "set_name": str(art.get("name") or ""),
+                    "name": str(item.get("name") or ""),
+                    "idx": int(idx) if str(idx).isdigit() else 0,
+                }
+    return {}
+
+
+@lru_cache(maxsize=4096)
+def _find_sr_artifact_by_item_id(item_id: str) -> Dict[str, Any]:
+    data = _load_json(_resource_path("meta-sr", "artifact", "data.json"))
+    target = str(item_id or "")
+    if not target:
+        return {}
+    for set_item in data.values():
+        if not isinstance(set_item, dict):
+            continue
+        idxs = set_item.get("idxs") or {}
+        for idx, item in idxs.items():
+            if not isinstance(item, dict):
+                continue
+            ids = item.get("ids") or {}
+            if str(target) in {str(k) for k in ids.keys()}:
+                return {
+                    "set_name": str(set_item.get("name") or ""),
                     "name": str(item.get("name") or ""),
                     "idx": int(idx) if str(idx).isdigit() else 0,
                 }
@@ -839,9 +885,20 @@ def _find_named_resource(base: str, name: str, filename: str) -> Path | None:
     return None
 
 
+def _weapon_game(weapon: Dict[str, Any]) -> str:
+    game = str(weapon.get("game") or "").lower()
+    if game in {"sr", "starrail", "hkrpg"}:
+        return "sr"
+    item_id = str(weapon.get("item_id") or weapon.get("itemId") or weapon.get("id") or weapon.get("tid") or "")
+    if item_id.startswith("2") or weapon.get("tid"):
+        return "sr"
+    return "gs"
+
+
 def _weapon_meta(weapon: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    item_id = str(weapon.get("item_id") or weapon.get("itemId") or weapon.get("id") or "")
-    return _find_meta_by_id("meta-gs/weapon", item_id)
+    item_id = str(weapon.get("item_id") or weapon.get("itemId") or weapon.get("id") or weapon.get("tid") or "")
+    base = "meta-sr/weapon" if _weapon_game(weapon) == "sr" else "meta-gs/weapon"
+    return _find_meta_by_id(base, item_id)
 
 
 def _weapon_name(weapon: Dict[str, Any]) -> str:
@@ -856,11 +913,12 @@ def _weapon_name(weapon: Dict[str, Any]) -> str:
 
 def _weapon_icon(weapon: Dict[str, Any]) -> Path | None:
     name = _weapon_name(weapon)
-    path = _find_named_resource("meta-gs/weapon", name, "icon.webp")
+    base = "meta-sr/weapon" if _weapon_game(weapon) == "sr" else "meta-gs/weapon"
+    path = _find_named_resource(base, name, "icon.webp")
     if path:
         return path
     folder, _ = _weapon_meta(weapon)
-    return _find_named_resource("meta-gs/weapon", folder, "icon.webp")
+    return _find_named_resource(base, folder, "icon.webp")
 
 
 def _fmt_weapon_attr(key: str, value: Any) -> str:
@@ -934,6 +992,9 @@ def _artifact_set_name(rel: Dict[str, Any]) -> str:
     by_id = _find_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or ""))
     if by_id.get("set_name"):
         return str(by_id["set_name"])
+    by_sr_id = _find_sr_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or rel.get("tid") or ""))
+    if by_sr_id.get("set_name"):
+        return str(by_sr_id["set_name"])
     name = _display_name(rel.get("name"), "")
     data = _load_json(_resource_path("meta-gs", "artifact", "data.json"))
     for item in data.values():
@@ -952,9 +1013,12 @@ def _artifact_pos_index(rel: Dict[str, Any], fallback_idx: int) -> int:
     by_id = _find_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or ""))
     if by_id.get("idx"):
         return int(by_id["idx"])
+    by_sr_id = _find_sr_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or rel.get("tid") or ""))
+    if by_sr_id.get("idx"):
+        return int(by_sr_id["idx"])
     try:
         num = int(pos)
-        if 1 <= num <= 5:
+        if 1 <= num <= 6:
             return num
     except (TypeError, ValueError):
         pass
@@ -962,6 +1026,16 @@ def _artifact_pos_index(rel: Dict[str, Any], fallback_idx: int) -> int:
 
 
 def _artifact_icon(rel: Dict[str, Any], fallback_idx: int) -> Path | None:
+    is_sr = rel.get("game") == "sr" or fallback_idx >= 5
+    if is_sr:
+        by_sr_id = _find_sr_artifact_by_item_id(str(rel.get("item_id") or rel.get("itemId") or rel.get("id") or rel.get("tid") or ""))
+        set_name = str(by_sr_id.get("set_name") or _artifact_set_name(rel))
+        idx = int(by_sr_id.get("idx") or _artifact_pos_index(rel, fallback_idx))
+        if set_name:
+            for name in (f"arti-{idx - 1}.webp", f"arti-{idx}.webp", f"{idx}.webp"):
+                path = _resource_path("meta-sr", "artifact", set_name, name)
+                if path:
+                    return path
     set_name = _artifact_set_name(rel)
     idx = _artifact_pos_index(rel, fallback_idx)
     if set_name:
@@ -1022,7 +1096,7 @@ def _prop_value(value: Any) -> str:
     except (TypeError, ValueError):
         return str(raw)
     key = str(value.get("appendPropId") or value.get("prop_id") or value.get("key") or value.get("mainPropId") or "").upper()
-    suffix = "%" if "PERCENT" in key or "CRITICAL" in key or "HURT" in key or "CHARGE" in key or "ADD" in key or "HEAL" in key else ""
+    suffix = "%" if any(x in key for x in ["PERCENT", "CRITICAL", "HURT", "CHARGE", "ADD", "HEAL", "CPCT", "CDMG", "RECHARGE", "DMG", "EFFECT", "EFF", "BREAK", "STANCE"]) else ""
     if abs(num - round(num)) < 0.01:
         return f"{round(num)}{suffix}"
     return f"{num:.1f}{suffix}"
@@ -1139,20 +1213,24 @@ def _draw_basic_panel(img: Image.Image, draw: ImageDraw.ImageDraw, result: Panel
         _text(draw, (cx + 42 - lv_w // 2, cy + 35), lv_text, (255, 245, 220), FONT_TINY)
         _text(draw, (cx + 8, cy + 62), label, (202, 195, 180), FONT_TINY)
 
+    _text(draw, (x + 318, y + 104), "星魂" if is_sr else "命座", (202, 195, 180), FONT_TINY)
     for idx in range(6):
-        cx = x + 326 + idx * 33
-        cy = y + 122
+        row = idx // 3
+        col = idx % 3
+        size = 42 if is_sr else 36
+        cx = x + 324 + col * 58
+        cy = y + 122 + row * 46
         icon_path = _resource_path("meta-sr" if is_sr else "meta-gs", "character", name, "icons", f"cons-{idx + 1}.webp")
-        icon = _open_image(icon_path, (26, 26), contain=True)
+        icon = _open_image(icon_path, (size, size), contain=True)
         active = cons is not None and idx < int(cons)
-        draw.ellipse((cx, cy, cx + 26, cy + 26), fill=(42, 43, 48), outline=(245, 230, 190), width=1)
+        draw.ellipse((cx, cy, cx + size, cy + size), fill=(42, 43, 48), outline=(245, 230, 190), width=2 if active else 1)
         if icon:
             if not active:
                 icon.putalpha(82)
             _paste(img, icon, (cx, cy))
         else:
             fill = (221, 191, 135) if active else (75, 75, 78)
-            draw.ellipse((cx + 2, cy + 2, cx + 24, cy + 24), fill=fill)
+            draw.ellipse((cx + 4, cy + 4, cx + size - 4, cy + size - 4), fill=fill)
     return y + h + 16
 
 
@@ -1166,16 +1244,31 @@ def _draw_section_title(draw: ImageDraw.ImageDraw, y: int, title: str, right: st
 
 def _draw_attrs(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
     props = char.get("fight_props") or {}
-    attrs = [
-        ("生命值", props.get("生命值") or props.get("HP")),
-        ("攻击力", props.get("攻击力")),
-        ("防御力", props.get("防御力")),
-        ("元素精通", props.get("元素精通")),
-        ("暴击率", _fmt(props.get("暴击率"), "%")),
-        ("暴击伤害", _fmt(props.get("暴击伤害"), "%")),
-        ("元素充能", _fmt(props.get("充能效率"), "%")),
-        ("伤害加成", _fmt(props.get("元素伤害加成") or props.get("伤害加成"), "%")),
-    ]
+    is_sr = char.get("game") == "sr"
+    if is_sr:
+        attrs = [
+            ("生命值", props.get("生命值") or props.get("HP") or props.get("hp")),
+            ("攻击力", props.get("攻击力") or props.get("atk")),
+            ("防御力", props.get("防御力") or props.get("def")),
+            ("速度", props.get("速度") or props.get("speed") or props.get("spd")),
+            ("暴击率", _fmt(props.get("暴击率") or props.get("cpct"), "%")),
+            ("暴击伤害", _fmt(props.get("暴击伤害") or props.get("cdmg"), "%")),
+            ("伤害加成", _fmt(props.get("元素伤害加成") or props.get("伤害加成") or props.get("dmg"), "%")),
+            ("击破特攻", _fmt(props.get("击破特攻") or props.get("break_effect") or props.get("stance"), "%")),
+            ("效果命中", _fmt(props.get("效果命中") or props.get("effect_hit") or props.get("effPct"), "%")),
+            ("效果抵抗", _fmt(props.get("效果抵抗") or props.get("effect_res") or props.get("effDef"), "%")),
+        ]
+    else:
+        attrs = [
+            ("生命值", props.get("生命值") or props.get("HP")),
+            ("攻击力", props.get("攻击力")),
+            ("防御力", props.get("防御力")),
+            ("元素精通", props.get("元素精通")),
+            ("暴击率", _fmt(props.get("暴击率"), "%")),
+            ("暴击伤害", _fmt(props.get("暴击伤害"), "%")),
+            ("元素充能", _fmt(props.get("充能效率"), "%")),
+            ("伤害加成", _fmt(props.get("元素伤害加成") or props.get("伤害加成"), "%")),
+        ]
     y = _draw_section_title(draw, y, "角色属性")
     row_h = 38
     for idx, (label, value) in enumerate(attrs):
@@ -1187,7 +1280,7 @@ def _draw_attrs(draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
         draw.rectangle((x, yy, x + 275, yy + row_h), fill=fill)
         _text(draw, (x + 16, yy + 8), label, (210, 210, 210), FONT_SMALL)
         _text(draw, (x + 152, yy + 8), _safe(value), (144, 232, 74), FONT_SMALL)
-    return y + 4 * row_h + 16
+    return y + ((len(attrs) + 1) // 2) * row_h + 16
 
 
 def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict[str, Any]) -> int:
@@ -1195,6 +1288,9 @@ def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict
     weapon = char.get("weapon") or {}
     if not isinstance(weapon, dict):
         weapon = {}
+    if is_sr:
+        weapon = dict(weapon)
+        weapon.setdefault("game", "sr")
     rarity = int(weapon.get("rarity") or 5)
     y = _draw_section_title(draw, y, "光锥" if is_sr else "武器")
     _rounded_r(draw, (25, y, 575, y + 144), 12, (38, 37, 42), (92, 81, 62), 1)
@@ -1234,14 +1330,18 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
     reliqs = [r for r in (char.get("reliquaries") or []) if isinstance(r, dict)][:max_count]
     _, weight = _weight_for_char(char)
     total, scores, title = character_artifact_score(char)
+    rank_score = total / max_count if is_sr and total > 0 else total
     y = _draw_section_title(draw, y, "遗器" if is_sr else "圣遗物", f"{len(reliqs)}/{max_count}")
-    _rounded_r(draw, (25, y, 575, y + 74), 12, (42, 39, 42), (92, 81, 62), 1)
+    _rounded_r(draw, (25, y, 575, y + 96), 12, (42, 39, 42), (92, 81, 62), 1)
     _text(draw, (45, y + 15), "遗器总分" if is_sr else "圣遗物总分", (210, 210, 210), FONT_SMALL)
     _text(draw, (170, y + 9), f"{total}", (255, 232, 170), FONT_CARD_TITLE)
     _text(draw, (278, y + 15), "评级", (210, 210, 210), FONT_SMALL)
-    _text(draw, (330, y + 9), artifact_rank(total), (144, 232, 74), FONT_CARD_TITLE)
+    _text(draw, (330, y + 9), artifact_rank(rank_score), (144, 232, 74), FONT_CARD_TITLE)
     _text(draw, (45, y + 48), f"评分规则：{_fit_text(title, 40)}", (170, 164, 145), FONT_TINY)
-    y += 92
+    useful = [k for k, v in weight.items() if v > 0]
+    names = {"atk": "攻击", "hp": "生命", "def": "防御", "speed": "速度", "cpct": "暴率", "cdmg": "爆伤", "dmg": "增伤", "stance": "击破", "effPct": "命中", "effDef": "抵抗", "recharge": "充能", "heal": "治疗"}
+    _text(draw, (45, y + 70), "有效词条：" + " / ".join(names.get(k, k) for k in useful[:8]), (188, 196, 210), FONT_TINY)
+    y += 114
     card_w, card_h = 176, 204
     for idx in range(max_count):
         col = idx % 3
@@ -1249,6 +1349,9 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
         x = 25 + col * 187
         yy = y + row * 216
         rel = reliqs[idx] if idx < len(reliqs) else {}
+        if is_sr and rel:
+            rel = dict(rel)
+            rel.setdefault("game", "sr")
         level = _artifact_level(rel.get("level"))
         rarity = int(rel.get("rarity") or 5)
         _rounded_r(draw, (x, yy, x + card_w, yy + card_h), 12, (42, 39, 42), _star_color(rarity), 1)
@@ -1282,11 +1385,15 @@ def _draw_artifact_detail(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, c
     max_count = 6 if is_sr else 5
     reliqs = [r for r in (char.get("reliquaries") or []) if isinstance(r, dict)][:max_count]
     total, scores, _ = character_artifact_score(char)
-    y = _draw_section_title(draw, y, "遗器评分详情" if is_sr else "圣遗物评分详情", f"{total} 分 [{artifact_rank(total)}]")
+    rank_score = total / max_count if is_sr and total > 0 else total
+    y = _draw_section_title(draw, y, "遗器评分详情" if is_sr else "圣遗物评分详情", f"{total} 分 [{artifact_rank(rank_score)}]")
     _text(draw, (38, y), f"评分规则：{title}", (210, 200, 176), FONT_TINY)
     y += 26
     for idx in range(max_count):
         rel = reliqs[idx] if idx < len(reliqs) else {}
+        if is_sr and rel:
+            rel = dict(rel)
+            rel.setdefault("game", "sr")
         score = scores[idx] if idx < len(scores) else (score_reliquary(rel, weight, idx) if rel else 0)
         x, h = 25, 112
         _rounded_r(draw, (x, y, 575, y + h), 12, (42, 39, 42), _star_color(int(rel.get("rarity") or 5)), 1)
@@ -1450,7 +1557,8 @@ async def render_artifact_list_image(result: PanelResult) -> bytes:
         _text(draw, (72, y + 16), f"{idx}", (255, 232, 170), FONT_TEXT)
         _text(draw, (120, y + 12), _char_name(char), (248, 244, 232), FONT_TEXT)
         _text(draw, (300, y + 14), " / ".join(f"{x:.1f}" for x in scores[:6 if is_sr else 5]) or ("无遗器" if is_sr else "无圣遗物"), (190, 201, 221), FONT_TINY)
-        _text(draw, (650, y + 12), f"{total:.1f} [{artifact_rank(total)}]", (144, 232, 74), FONT_TEXT)
+        rank_score = total / (6 if is_sr else 5) if is_sr and total > 0 else total
+        _text(draw, (650, y + 12), f"{total:.1f} [{artifact_rank(rank_score)}]", (144, 232, 74), FONT_TEXT)
         _text(draw, (120, y + 38), _fit_text(title, 28), (160, 171, 190), FONT_TINY)
     _text(draw, (54, height - 42), "评分权重使用 gscore_miao-plugin 内置适配规则", (145, 158, 186), FONT_TINY)
     return await convert_img(img)
