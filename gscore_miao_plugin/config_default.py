@@ -8,17 +8,17 @@ from gsuid_core.utils.plugins_config.models import (GSC, GsBoolConfig,
 CONFIG_DEFAULT: Dict[str, GSC] = {
     "EnableHelp": GsBoolConfig(
         "开启帮助指令",
-        "关闭后将不响应 帮助/菜单 指令",
+        "关闭后将不响应 原神帮助/原神菜单 指令",
         True,
     ),
     "EnableVersion": GsBoolConfig(
         "开启版本指令",
-        "关闭后将不响应 版本 指令",
+        "关闭后将不响应 原神版本 指令",
         True,
     ),
     "EnableMiaoSetting": GsBoolConfig(
-        "开启喵喵设置",
-        "开启后可用 喵喵设置 查看与修改本插件配置",
+        "开启喵喵原神设置",
+        "开启后可用 喵喵原神设置 查看与修改原神插件配置",
         True,
     ),
     "CommandPrefix": GsStrConfig(
@@ -29,7 +29,7 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     "HelpTitle": GsStrConfig(
         "帮助标题",
         "帮助页主标题",
-        "喵喵帮助（GsCore）",
+        "喵喵原神帮助（GsCore）",
     ),
     "HelpSubTitle": GsStrConfig(
         "帮助副标题",
@@ -98,7 +98,7 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     ),
     "EnableDailySign": GsBoolConfig(
         "开启米游社签到",
-        "允许已登录用户执行原神每日签到",
+        "允许已登录用户执行原神/崩铁每日签到",
         True,
     ),
     "EnableAutoDailySign": GsBoolConfig(
@@ -255,7 +255,7 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     ),
     "MaxCommaGroup": GsIntConfig(
         "数字分组最大值",
-        "喵喵设置逗号 的最大允许值",
+        "喵喵原神设置逗号 的最大允许值",
         8,
         max_value=12,
     ),

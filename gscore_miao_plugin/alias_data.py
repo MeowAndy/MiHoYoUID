@@ -118,9 +118,9 @@ def render_alias_text(query: str = "") -> str:
         if not name:
             return f"未找到角色别名：{query}"
         aliases = "、".join(CHARACTER_ALIASES.get(name, [])) or "暂无内置别名"
-        return f"【喵喵角色别名】\n{query} => {name}\n别名：{aliases}"
+        return f"【喵喵原神角色别名】\n{query} => {name}\n别名：{aliases}"
 
-    lines = ["【喵喵角色别名】", "当前已内置常用原神角色别名，可用：喵喵角色别名 <角色名/别名>", ""]
+    lines = ["【喵喵原神角色别名】", "当前已内置常用原神角色别名，可用：喵喵原神角色别名 <角色名/别名>", ""]
     for name in sorted(CHARACTER_ALIASES.keys())[:40]:
         aliases = "、".join(CHARACTER_ALIASES[name][:3])
         lines.append(f"{name}: {aliases}")

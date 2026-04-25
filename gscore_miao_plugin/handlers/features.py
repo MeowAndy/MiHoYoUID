@@ -65,7 +65,7 @@ async def _send_artifact_list(bot: Bot, ev: Event, uid: str) -> None:
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     uid = await _uid_from_event(ev, uid)
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵圣遗物列表 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神圣遗物列表 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     result = await _query_user_panel(bot, ev, uid)
     if result:
         try:
@@ -74,7 +74,7 @@ async def _send_artifact_list(bot: Bot, ev: Event, uid: str) -> None:
             await bot.send(f"圣遗物列表图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result)}")
 
 
-@sv_feature.on_regex(r"^(角色别名|别名)\s*(?P<name>.*)$", block=True)
+@sv_feature.on_regex(r"^原神(角色别名|别名)\s*(?P<name>.*)$", block=True)
 async def send_alias(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableAliasQuery").data:
         return
@@ -85,7 +85,7 @@ async def send_alias(bot: Bot, ev: Event):
 
 
 @sv_feature.on_regex(
-    r"^(?!(?:(?:米游社|mys)(?:全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)|更新面板|刷新面板|全部面板更新|重载面板|删除面板|解绑UID|解绑uid|角色面板图|面板图|面板列表|面板角色列表|角色列表|面板|角色面板|角色卡片|圣遗物列表|遗物列表|圣遗物评分|遗物评分|伤害计算|伤害估算)(?:\s|$))(?P<name>.+?)\s*(?P<mode>面板|面版|详情|详细|圣遗物|遗器|伤害)\s*(?P<uid>\d{9,10})?$",
+    r"^原神(?!(?:(?:米游社|mys)(?:全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)|更新面板|刷新面板|全部面板更新|重载面板|删除面板|解绑UID|解绑uid|角色面板图|面板图|面板列表|面板角色列表|角色列表|面板|角色面板|角色卡片|圣遗物列表|遗物列表|圣遗物评分|遗物评分|伤害计算|伤害估算)(?:\s|$))(?P<name>.+?)\s*(?P<mode>面板|面版|详情|详细|圣遗物|遗器|伤害)\s*(?P<uid>\d{9,10})?$",
     block=True,
 )
 async def send_miao_style_profile(bot: Bot, ev: Event):
@@ -100,7 +100,7 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
         return await _send_artifact_list(bot, ev, uid_in_name or (data.get("uid") or "").strip())
     uid = await _uid_from_event(ev, (data.get("uid") or "").strip())
     if not uid:
-        return await bot.send(f"请携带 UID，例如：喵喵{name}{mode} 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send(f"请携带 UID，例如：喵喵原神{name}{mode} 100000001\n也可先绑定：喵喵原神设置uid 100000001")
 
     result = await _query_user_panel(bot, ev, uid)
     if not result:
@@ -127,12 +127,12 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
         return await bot.send(f"图片面板渲染失败，已回退文本摘要：{e}\n\n{render_panel_text(result)}")
 
 
-@sv_feature.on_regex(r"^(圣遗物列表|遗物列表)\s*(?P<uid>\d{9,10})?$", block=True)
+@sv_feature.on_regex(r"^原神(圣遗物列表|遗物列表)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_artifact_list(bot: Bot, ev: Event):
     await _send_artifact_list(bot, ev, ((ev.regex_dict or {}).get("uid") or "").strip())
 
 
-@sv_feature.on_regex(r"^(圣遗物评分|遗物评分|圣遗物)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
+@sv_feature.on_regex(r"^原神(圣遗物评分|遗物评分|圣遗物)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
 async def send_artifact(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableArtifactScore").data:
         return
@@ -141,7 +141,7 @@ async def send_artifact(bot: Bot, ev: Event):
     uid = ((ev.regex_dict or {}).get("uid") or "").strip()
     uid = await _uid_from_event(ev, uid)
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵圣遗物评分 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神圣遗物评分 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     name = _resolve_name((ev.regex_dict or {}).get("name") or "")
     result = await _query_user_panel(bot, ev, uid)
     if result:
@@ -153,7 +153,7 @@ async def send_artifact(bot: Bot, ev: Event):
         await bot.send(render_artifact_text(result, name))
 
 
-@sv_feature.on_regex(r"^(伤害计算|伤害估算|伤害)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
+@sv_feature.on_regex(r"^原神(伤害计算|伤害估算|伤害)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
 async def send_damage(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableDamageCalc").data:
         return
@@ -162,14 +162,14 @@ async def send_damage(bot: Bot, ev: Event):
     uid = ((ev.regex_dict or {}).get("uid") or "").strip()
     uid = await _uid_from_event(ev, uid)
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵伤害计算 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神伤害计算 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     name = _resolve_name((ev.regex_dict or {}).get("name") or "")
     result = await _query_user_panel(bot, ev, uid)
     if result:
         await bot.send(render_damage_text(result, name))
 
 
-@sv_feature.on_regex(r"^(角色面板图|面板图)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
+@sv_feature.on_regex(r"^原神(角色面板图|面板图)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
 async def send_single_panel(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -178,7 +178,7 @@ async def send_single_panel(bot: Bot, ev: Event):
     uid = ((ev.regex_dict or {}).get("uid") or "").strip()
     uid = await _uid_from_event(ev, uid)
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵面板图 100000001 雷神\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神面板图 100000001 雷神\n也可先绑定：喵喵原神设置uid 100000001")
     name = _resolve_name((ev.regex_dict or {}).get("name") or "")
     result = await _query_user_panel(bot, ev, uid)
     if result:
@@ -188,7 +188,7 @@ async def send_single_panel(bot: Bot, ev: Event):
             await bot.send(f"图片面板渲染失败，已回退文本摘要：{e}\n\n{render_panel_text(result)}")
 
 
-@sv_feature.on_regex(r"^(面板列表|面板角色列表|角色列表)\s*(?P<uid>\d{9,10})?$", block=True)
+@sv_feature.on_regex(r"^原神(面板列表|面板角色列表|角色列表)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_panel_list(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -196,7 +196,7 @@ async def send_panel_list(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵面板列表 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神面板列表 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     result = await _query_user_panel(bot, ev, uid)
     if result:
         try:
@@ -205,7 +205,7 @@ async def send_panel_list(bot: Bot, ev: Event):
             await bot.send(f"面板列表图渲染失败，已回退文本摘要：{e}\n\n{render_panel_text(result)}")
 
 
-@sv_feature.on_regex(r"^(更新面板|刷新面板|全部面板更新|重载面板)\s*(?P<uid>\d{9,10})?$", block=True)
+@sv_feature.on_regex(r"^原神(更新面板|刷新面板|全部面板更新|重载面板)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_panel_update(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -213,7 +213,7 @@ async def send_panel_update(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵更新面板 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神更新面板 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid)
     if result:
@@ -223,7 +223,7 @@ async def send_panel_update(bot: Bot, ev: Event):
             await bot.send(f"面板已刷新：{uid}\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
-@sv_feature.on_regex(r"^(米游社|mys)(全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)\s*(?P<uid>\d{9,10})?$", block=True)
+@sv_feature.on_regex(r"^原神(米游社|mys)(全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_mys_panel_update(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -231,7 +231,7 @@ async def send_mys_panel_update(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵米游社更新面板 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神米游社更新面板 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid, source_override="mys", allow_fallback=False)
     if result:
@@ -241,7 +241,7 @@ async def send_mys_panel_update(bot: Bot, ev: Event):
             await bot.send(f"米游社面板已刷新：{uid}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
-@sv_feature.on_regex(r"^(删除面板|解绑UID|解绑uid)\s*(?P<uid>\d{9,10})?$", block=True)
+@sv_feature.on_regex(r"^原神(删除面板|解绑UID|解绑uid)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_panel_delete(bot: Bot, ev: Event):
     if not can_use_plugin(ev):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")

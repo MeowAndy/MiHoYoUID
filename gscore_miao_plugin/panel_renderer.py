@@ -1373,7 +1373,7 @@ async def render_artifact_list_image(result: PanelResult) -> bytes:
     height = 170 + max(1, len(rows[:16])) * 74 + 80
     img = _gradient_bg(width, height).convert("RGBA")
     draw = ImageDraw.Draw(img)
-    _text(draw, (52, 42), "喵喵圣遗物列表", (255, 247, 220), FONT_TITLE)
+    _text(draw, (52, 42), "喵喵原神圣遗物列表", (255, 247, 220), FONT_TITLE)
     _text(draw, (56, 100), f"UID {result.uid} · 数据源 {result.source} · 按总评分排序", (199, 210, 230), FONT_SMALL)
     if not rows:
         _rounded_r(draw, (52, 160, width - 52, 280), 14, (31, 39, 61), (70, 83, 120), 1)
@@ -1413,7 +1413,7 @@ async def render_help_image(title: str, subtitle: str, groups: List[Dict[str, An
     draw.ellipse((width - 430, -250, width + 180, 360), fill=(231, 184, 99, 62))
     draw.ellipse((-260, 120, 360, 740), fill=(88, 123, 190, 48))
 
-    _text(draw, (68, 54), title or "喵喵帮助", (255, 247, 222), FONT_HELP_TITLE)
+    _text(draw, (68, 54), title or "喵喵原神帮助", (255, 247, 222), FONT_HELP_TITLE)
     _text(draw, (72, 120), subtitle or "Yunzai miao-plugin 的 GsCore 迁移版", (220, 228, 244), FONT_SUBTITLE)
     _text(draw, (72, 158), f"当前命令前缀：{prefix} · 可在 WebUI 的 CommandPrefix 修改，重启后生效", (170, 182, 207), FONT_SMALL)
 

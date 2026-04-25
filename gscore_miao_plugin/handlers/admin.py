@@ -44,7 +44,7 @@ def _normalize_key(raw: str) -> str:
     return alias.get(raw, raw)
 
 
-@sv_admin.on_regex(r"^#?设置\s*(?P<key>[^\s]+)?\s*(?P<value>.*)$", block=True)
+@sv_admin.on_regex(r"^#?原神设置\s*(?P<key>[^\s]+)?\s*(?P<value>.*)$", block=True)
 async def miao_setting(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableMiaoSetting").data:
         return
@@ -65,7 +65,7 @@ async def miao_setting(bot: Bot, ev: Event):
         show_star = user_cfg.get("show_star", False)
         comma_group = user_cfg.get("comma_group", 3)
         return await bot.send(
-            "【喵喵设置】\n"
+            "【喵喵原神设置】\n"
             f"绑定UID: {uid}\n"
             f"面板服务: {panel_server}\n"
             f"面板图: {'开启' if custom_splash else '关闭'}\n"
@@ -73,22 +73,22 @@ async def miao_setting(bot: Bot, ev: Event):
             f"星级显示: {'开启' if show_star else '关闭'}\n"
             f"数字分组: {comma_group}\n\n"
             "可用：\n"
-            f"{prefix}设置面板服务 <{_schema_desc()}>\n"
-            f"{prefix}设置uid <UID>\n"
-            f"{prefix}设置面板图 <开启|关闭>\n"
-            f"{prefix}设置组队 <开启|关闭>\n"
-            f"{prefix}设置星级 <开启|关闭>\n"
-            f"{prefix}设置逗号 <2-8>\n"
-            f"{prefix}设置历史\n"
-            f"{prefix}设置导出\n"
-            f"{prefix}设置重置"
+            f"{prefix}原神设置面板服务 <{_schema_desc()}>\n"
+            f"{prefix}原神设置uid <UID>\n"
+            f"{prefix}原神设置面板图 <开启|关闭>\n"
+            f"{prefix}原神设置组队 <开启|关闭>\n"
+            f"{prefix}原神设置星级 <开启|关闭>\n"
+            f"{prefix}原神设置逗号 <2-8>\n"
+            f"{prefix}原神设置历史\n"
+            f"{prefix}原神设置导出\n"
+            f"{prefix}原神设置重置"
         )
 
     if key == "历史":
         lines = await get_recent_history_lines(ev)
         if not lines:
             return await bot.send("暂无设置历史记录")
-        return await bot.send("【喵喵设置历史】\n" + "\n".join(lines[:20]))
+        return await bot.send("【喵喵原神设置历史】\n" + "\n".join(lines[:20]))
 
     if key == "导出":
         if not MiaoConfig.get_config("EnableSettingExport").data:
@@ -96,7 +96,7 @@ async def miao_setting(bot: Bot, ev: Event):
         user_cfg = merge_user_cfg(await get_user_cfg(ev.user_id, ev.bot_id))
         text = json.dumps(user_cfg, ensure_ascii=False, indent=2)
         await add_history(ev, "设置导出", "ok")
-        return await bot.send(f"【喵喵设置导出】\n{text}")
+        return await bot.send(f"【喵喵原神设置导出】\n{text}")
 
     if key == "重置":
         if not MiaoConfig.get_config("EnableSettingReset").data:
@@ -120,11 +120,11 @@ async def miao_setting(bot: Bot, ev: Event):
             await add_history(ev, "UID解绑", "ok")
             return await bot.send("已解绑 UID")
         if not value.isdigit() or len(value) not in {9, 10}:
-            return await bot.send(f"请填写正确 UID，例如：{_cmd_prefix()}设置uid 100000001")
+            return await bot.send(f"请填写正确 UID，例如：{_cmd_prefix()}原神设置uid 100000001")
         await bind_uid(ev.user_id, ev.bot_id, value)
         await add_history(ev, "UID绑定", value)
         prefix = _cmd_prefix()
-        return await bot.send(f"已绑定 UID：{value}\n之后可直接使用：{prefix}面板 / {prefix}雷神面板")
+        return await bot.send(f"已绑定 UID：{value}\n之后可直接使用：{prefix}原神面板 / {prefix}原神雷神面板")
 
     if key == "面板图":
         b = _normalize_bool(value)
@@ -154,7 +154,7 @@ async def miao_setting(bot: Bot, ev: Event):
         try:
             n = int(value)
         except Exception:
-            return await bot.send(f"请填写数字，例如：{_cmd_prefix()}设置逗号 3")
+            return await bot.send(f"请填写数字，例如：{_cmd_prefix()}原神设置逗号 3")
         max_group = int(MiaoConfig.get_config("MaxCommaGroup").data)
         if n < 2 or n > max_group:
             return await bot.send(f"数字分组范围应为 2-{max_group}")
@@ -162,4 +162,4 @@ async def miao_setting(bot: Bot, ev: Event):
         await add_history(ev, "数字分组", str(n))
         return await bot.send(f"已设置数字分组为：{n}")
 
-    await bot.send(f"暂不支持该设置项，请发送 {_cmd_prefix()}设置 查看帮助")
+    await bot.send(f"暂不支持该设置项，请发送 {_cmd_prefix()}原神设置 查看帮助")

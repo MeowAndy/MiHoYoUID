@@ -34,7 +34,7 @@ def _help_groups_for_display(setting_export: bool, setting_reset: bool):
     return groups
 
 
-@sv_help.on_fullmatch(("帮助", "菜单"), block=True)
+@sv_help.on_fullmatch(("原神帮助", "原神菜单"), block=True)
 async def send_help(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableHelp").data:
         return
@@ -68,7 +68,7 @@ async def send_help(bot: Bot, ev: Event):
     await bot.send(msg)
 
 
-@sv_help.on_fullmatch(("版本",), block=True)
+@sv_help.on_fullmatch(("原神版本",), block=True)
 async def send_version(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableVersion").data:
         return
@@ -77,7 +77,7 @@ async def send_version(bot: Bot, ev: Event):
     await bot.send(f"gscore_miao-plugin v{PLUGIN_VERSION}")
 
 
-@sv_help.on_regex(r"^(面板|角色面板|角色卡片)\s*(?P<uid>\d{9,10})?$", block=True)
+@sv_help.on_regex(r"^原神(面板|角色面板|角色卡片)\s*(?P<uid>\d{9,10})?$", block=True)
 async def send_panel(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -87,7 +87,7 @@ async def send_panel(bot: Bot, ev: Event):
     user_cfg = merge_user_cfg(await get_user_cfg(ev.user_id, ev.bot_id))
     uid = ((ev.regex_dict or {}).get("uid") or "").strip() or str(user_cfg.get("uid") or "").strip()
     if not uid:
-        return await bot.send("请携带 UID，例如：喵喵面板 100000001\n也可先绑定：喵喵设置uid 100000001")
+        return await bot.send("请携带 UID，例如：喵喵原神面板 100000001\n也可先绑定：喵喵原神设置uid 100000001")
     source = str(user_cfg.get("panel_server") or "auto")
     result, errors = await query_panel(uid, source)
     if result is None:
@@ -96,7 +96,7 @@ async def send_panel(bot: Bot, ev: Event):
             "面板数据查询失败。\n"
             f"当前服务：{source}\n"
             f"失败原因：\n{detail}\n\n"
-                "请在网页控制台配置 Miao/Enka/米游社等数据源，或使用：喵喵设置面板服务 auto"
+                "请在网页控制台配置 Miao/Enka/米游社等数据源，或使用：喵喵原神设置面板服务 auto"
         )
 
     render_mode = str(MiaoConfig.get_config("PanelRenderMode").data or "image")

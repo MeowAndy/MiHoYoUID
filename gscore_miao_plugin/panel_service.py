@@ -54,7 +54,7 @@ def _render_characters(result: PanelResult) -> List[str]:
 
 def render_panel_text(result: PanelResult) -> str:
     lines = [
-        "【喵喵面板】",
+        "【喵喵原神面板】",
         f"UID：{result.uid}",
         f"数据源：{result.source}",
     ]

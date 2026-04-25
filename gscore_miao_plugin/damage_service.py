@@ -67,14 +67,14 @@ def render_damage_text(result: PanelResult, character_query: str = "") -> str:
         if not matched:
             available = "、".join(_char_name(c) for c in characters[:8]) or "无角色"
             return "\n".join([
-                "【喵喵伤害估算】",
+                "【喵喵原神伤害估算】",
                 f"UID：{result.uid}",
                 f"数据源：{result.source}",
                 f"未在公开面板中找到角色：{character_query}。当前可见角色：{available}",
             ])
         characters = matched
 
-    lines = ["【喵喵伤害估算】", f"UID：{result.uid}", f"数据源：{result.source}"]
+    lines = ["【喵喵原神伤害估算】", f"UID：{result.uid}", f"数据源：{result.source}"]
     if not characters:
         lines.append("当前数据源没有返回可计算的角色详情。建议使用 Enka 且公开角色展柜。")
         return "\n".join(lines)
