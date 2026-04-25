@@ -1459,7 +1459,6 @@ async def render_help_image(title: str, subtitle: str, groups: List[Dict[str, An
         items = list(group.get("items") or [])
         if not items:
             continue
-        _rounded_r(draw, (58, y - 10, width - 58, y + 44), 18, (36, 43, 66), (92, 109, 150), 1)
         _text(draw, (84, y), f"✦ {group.get('group') or '命令'}", (255, 232, 174), FONT_HELP_GROUP)
         y += 64
         for idx, item in enumerate(items):
