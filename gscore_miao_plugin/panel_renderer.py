@@ -501,12 +501,29 @@ def _draw_profile_list_card(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int,
     _rounded_r(draw, box, 12, (*fill, 214), (*outline, 190), 1)
 
 
+def _char_rank_info(char: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    rank = char.get("groupRank") or char.get("group_rank")
+    if not isinstance(rank, dict):
+        return None
+    rank_value = rank.get("rank")
+    try:
+        rank_value = int(rank_value)
+    except (TypeError, ValueError):
+        return None
+    rank_type = str(rank.get("rankType") or rank.get("rank_type") or "dmg")
+    frame = rank_value if rank_value <= 3 else 4
+    return {"rank": rank_value, "rank_type": rank_type, "frame": frame}
+
+
 def _rank_sprite(char: Dict[str, Any], size: int) -> Optional[Image.Image]:
-    path = _resource_path("character", "imgs", "dmg-rank-bg.png" if _char_star(char) >= 5 else "mark-rank-bg.png")
+    rank = _char_rank_info(char)
+    if not rank:
+        return None
+    path = _resource_path("character", "imgs", "mark-rank-bg.png" if rank["rank_type"] == "mark" else "dmg-rank-bg.png")
     sprite = _open_image(path)
     if sprite:
         frame_w = sprite.width // 5
-        rank_index = 1 if _char_star(char) >= 5 else 4
+        rank_index = int(rank["frame"])
         return sprite.crop((frame_w * rank_index, 0, frame_w * (rank_index + 1), sprite.height)).resize((size, size), Image.Resampling.BICUBIC)
 
 
@@ -514,8 +531,11 @@ def _draw_rank_sprite(img: Image.Image, char: Dict[str, Any], x: int, y: int, si
     crop = _rank_sprite(char, size)
     if crop:
         img.alpha_composite(crop, (x, y))
+    rank = _char_rank_info(char)
+    if not rank or int(rank["frame"]) != 4:
+        return
     draw = ImageDraw.Draw(img)
-    text = "最强" if _char_star(char) >= 5 else "最高分"
+    text = str(rank["rank"])
     tw = draw.textbbox((0, 0), text, font=FONT_PROFILE_CONS)[2]
     _shadow_text(draw, (x + (size - tw) // 2, y + size - 23), text, (255, 238, 212), FONT_PROFILE_CONS)
 
@@ -528,6 +548,7 @@ def _draw_profile_avatar(img: Image.Image, draw: ImageDraw.ImageDraw, char: Dict
     rank_x = x - 6
     rank_y = y - 6
     rank_bg = _rank_sprite(char, rank_size)
+    rank_info = _char_rank_info(char)
     if rank_bg:
         img.alpha_composite(rank_bg, (rank_x, rank_y))
     draw.ellipse((x, y, x + size, y + size), fill=_star_color(_char_star(char)), outline=(255, 255, 255), width=2)
@@ -539,9 +560,10 @@ def _draw_profile_avatar(img: Image.Image, draw: ImageDraw.ImageDraw, char: Dict
         label_h = 31
         label = rank_bg.crop((0, rank_size - label_h, rank_size, rank_size))
         img.alpha_composite(label, (rank_x, rank_y + rank_size - label_h))
-    text = "最强" if _char_star(char) >= 5 else "最高分"
-    tb = draw.textbbox((0, 0), text, font=FONT_PROFILE_CONS)
-    _shadow_text(draw, (x + (size - (tb[2] - tb[0])) // 2, y + size - 22), text, (255, 238, 212), FONT_PROFILE_CONS)
+    if rank_info and int(rank_info["frame"]) == 4:
+        text = str(rank_info["rank"])
+        tb = draw.textbbox((0, 0), text, font=FONT_PROFILE_CONS)
+        _shadow_text(draw, (x + (size - (tb[2] - tb[0])) // 2, y + size - 22), text, (255, 238, 212), FONT_PROFILE_CONS)
     name_text = _fit_text(name, 5)
     cons = _safe(char.get("constellation"), "0")
     ny = y + size + 7
