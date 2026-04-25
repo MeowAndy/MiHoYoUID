@@ -51,13 +51,13 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
     "DefaultPanelServer": GsStrConfig(
         "默认面板服务",
         "用户未设置时使用的默认服务",
-        "auto",
+        "mys",
         options=["auto", "miao", "enka", "mgg", "hutao", "mys"],
     ),
     "PanelSourcePriority": GsListStrConfig(
         "面板数据源优先级",
         "auto 模式下按顺序尝试，留空项会自动忽略",
-        ["miao", "enka", "mys"],
+        ["mys", "miao", "enka"],
         options=["miao", "enka", "mys", "mgg", "hutao"],
     ),
     "PanelRequestTimeout": GsIntConfig(
