@@ -13,7 +13,7 @@ from .mys_service import fetch_starrail_roles
 from .settings import merge_user_cfg
 from .store import get_all_user_cfg, get_group_bot_self_id
 
-_JOB_ID = "gscore_miao_auto_daily_sign"
+_JOB_ID = "MiHoYoUID_auto_daily_sign"
 SIGN_RESULT_SUBSCRIBE = "喵喵签到结果"
 _SIGN_LOCK = asyncio.Lock()
 _LAST_RUN_DATE = ""

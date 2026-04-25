@@ -1,8 +1,8 @@
-# gscore_miao-plugin
+# MiHoYoUID
 
 将 Yunzai `miao-plugin` 迁移为可在 GsCore 运行的简化插件。
 
-## 已移植能力（v0.15.10）
+## 已移植能力（v0.15.11）
 
 - 帮助：`喵喵原神帮助` / `喵喵原神菜单` / `喵喵崩铁帮助` / `喵喵崩铁菜单`
 - 版本：`喵喵原神版本`
@@ -84,24 +84,24 @@
 
 ## 目录
 
-- `gscore_miao_plugin/` 插件主体
-- `gscore_miao_plugin/config_default.py` WebUI 配置模型
-- `gscore_miao_plugin/config.py` StringConfig 注册
-- `gscore_miao_plugin/database.py` WebUI 数据表映射（用户配置/历史）
-- `gscore_miao_plugin/status.py` GsCore 状态页注册
+- `MiHoYoUID/` 插件主体
+- `MiHoYoUID/config_default.py` WebUI 配置模型
+- `MiHoYoUID/config.py` StringConfig 注册
+- `MiHoYoUID/database.py` WebUI 数据表映射（用户配置/历史）
+- `MiHoYoUID/status.py` GsCore 状态页注册
 
 ## 安装
 
 将本目录放入 GsCore 插件目录，重启 GsCore 后即可加载：
 
-- 插件名：`gscore_miao-plugin`
+- 插件名：`MiHoYoUID`
 - 强制前缀：`喵喵` / `miao`
 - 配置文件：GsCore 资源目录下的 `GsCoreMiao/config.json`
 
 ## 说明
 
 原 `miao-plugin` 为 Yunzai 生态（Node.js）插件，和 GsCore（Python）运行时差异较大。
-当前版本为 **功能语义迁移（v0.15.10）**，重点迁移命令形态、UID 绑定、面板管理入口、配置管理、更新日志、基础权限控制、面板数据源、图片模板、角色别名、圣遗物/遗器评分、登录签到与原神/星铁命令域。
+当前版本为 **功能语义迁移（v0.15.11）**，重点迁移命令形态、UID 绑定、面板管理入口、配置管理、更新日志、基础权限控制、面板数据源、图片模板、角色别名、圣遗物/遗器评分、登录签到与原神/星铁命令域。
 Miao API 已对齐 `profile/data` 参数，米游社源已实现 `index` + `character/list` 与 DS 签名流程，Enka 源已解析角色详情摘要；星铁侧已接入 Mihomo、Avocado、EnkaHSR 数据源；`PanelRenderMode=image` 可输出 miao-plugin 风格角色面板图片。
 插件默认使用内置适配资源集；如需调试或覆盖素材，可在 WebUI 将 `MiaoPluginResourcePath` 指向本地 Yunzai `miao-plugin` 目录，插件会尝试读取 `resources/meta-gs` 与 `resources/meta-sr` 下的角色立绘、武器/光锥图标、圣遗物/遗器图标、命座/星魂与天赋/行迹图标；素材缺失时会自动使用占位/文本回退，避免无响应。
 圣遗物/遗器评分已迁移 miao-plugin 风格的常用角色权重和部分动态规则；星铁面板已按 miao-plugin 的 Mihomo/Avocado/EnkaHSR 适配思路补齐角色详情属性、光锥 hp/atk/def、遗器 mainAffixId/subAffixList 反算主副词条数值与副词条评分。伤害估算仍为首版通用算法，后续会继续逐角色对齐 miao-plugin 计算模板。
@@ -110,6 +110,9 @@ Miao API 已对齐 `profile/data` 参数，米游社源已实现 `index` + `char
 ## 更新日志（内置）
 
 完整变更记录见 `CHANGELOG.md`。
+
+- v0.15.11
+  - 项目与插件包名称统一改为 MiHoYoUID，更新加载入口、元数据、展示文案与请求 User-Agent
 
 - v0.15.10
   - 单角色面板角色属性与光锥/武器标题改为居中显示，原神侧同步应用武器标题布局
@@ -158,7 +161,7 @@ Miao API 已对齐 `profile/data` 参数，米游社源已实现 `index` + `char
   - `喵喵签到` 保持不变，继续统一处理原神与崩铁米游社签到
 
 - v0.14.9
-  - 内置资源改为 gscore_miao-plugin 适配资源集，外部 miao-plugin 目录仅作为可选覆盖
+  - 内置资源改为 MiHoYoUID 适配资源集，外部 miao-plugin 目录仅作为可选覆盖
   - 面板素材保留当前渲染链路需要的 common、character、help 与 meta-gs 图片/JSON 数据
   - 圣遗物评分不再运行时读取原版 JS，改为使用插件内置 Python 评分权重与动态规则
 

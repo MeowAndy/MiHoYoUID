@@ -251,7 +251,7 @@ def _resource_dirs() -> Tuple[Path, ...]:
     # 优先使用本插件自带资源，避免要求用户额外 clone Yunzai miao-plugin。
     root = _plugin_root()
     _append_resource_dir(dirs, root)
-    _append_resource_dir(dirs, root / "gscore_miao_plugin")
+    _append_resource_dir(dirs, root / "MiHoYoUID")
 
     configured = str(MiaoConfig.get_config("MiaoPluginResourcePath").data or "").strip()
     if configured:
@@ -785,7 +785,7 @@ def _draw_profile_list_image(result: PanelResult, characters: List[Dict[str, Any
     sb = draw.textbbox((0, 0), serv, font=FONT_PROFILE_LABEL)
     _shadow_text(draw, (width - 48 - (sb[2] - sb[0]), footer_y + 14), serv, (255, 255, 255), FONT_PROFILE_LABEL)
     from .version import PLUGIN_VERSION
-    credit = f"Created By Miao-Plugin & gscore_miao-plugin {PLUGIN_VERSION} By MeowAndy"
+    credit = f"Created By Miao-Plugin & MiHoYoUID {PLUGIN_VERSION} By MeowAndy"
     cb = draw.textbbox((0, 0), credit, font=FONT_PROFILE_CREDIT)
     _shadow_text(draw, ((width - (cb[2] - cb[0])) // 2, height - 42), credit, (255, 255, 255), FONT_PROFILE_CREDIT)
     return img
@@ -1665,7 +1665,7 @@ async def render_panel_image(result: PanelResult) -> bytes:
         img = Image.new("RGBA", (width, height), (22, 23, 27, 255))
         draw = ImageDraw.Draw(img)
         bottom = _draw_miao_profile(img, draw, result, characters[0], width, height)
-        img = _crop_panel_canvas(img, bottom, "Created by gscore_miao-plugin · layout inspired by miao-plugin")
+        img = _crop_panel_canvas(img, bottom, "Created by MiHoYoUID · layout inspired by miao-plugin")
         return await convert_img(img)
 
     return await render_panel_list_image(result, False)
@@ -1728,7 +1728,7 @@ async def render_artifact_image(result: PanelResult, character_query: str = "") 
     _draw_miao_header(img, draw, result, char, width)
     y = _draw_basic_panel(img, draw, result, char)
     y = _draw_artifact_detail(img, draw, y, char)
-    img = _crop_panel_canvas(img, y, "Created by gscore_miao-plugin · artifact detail inspired by miao-plugin")
+    img = _crop_panel_canvas(img, y, "Created by MiHoYoUID · artifact detail inspired by miao-plugin")
     return await convert_img(img)
 
 
@@ -1760,7 +1760,7 @@ async def render_artifact_list_image(result: PanelResult) -> bytes:
         rank_score = total / (6 if is_sr else 5) if is_sr and total > 0 else total
         _text(draw, (650, y + 12), f"{total:.1f} [{artifact_rank(rank_score)}]", (144, 232, 74), FONT_TEXT)
         _text(draw, (120, y + 38), _fit_text(title, 28), (160, 171, 190), FONT_TINY)
-    _text(draw, (54, height - 42), "评分权重使用 gscore_miao-plugin 内置适配规则", (145, 158, 186), FONT_TINY)
+    _text(draw, (54, height - 42), "评分权重使用 MiHoYoUID 内置适配规则", (145, 158, 186), FONT_TINY)
     return await convert_img(img)
 
 
@@ -1813,7 +1813,7 @@ async def render_help_image(title: str, subtitle: str, groups: List[Dict[str, An
             _text(draw, (x + 24, cy + 42), _fit_text(desc, 30), (185, 197, 220), FONT_HELP_DESC)
         y += ((len(items) + cols - 1) // cols) * item_h + group_gap
 
-    _text(draw, (70, height - 48), "Created by gscore_miao-plugin · help card inspired by XutheringWavesUID & miao-plugin", (150, 163, 190), FONT_TINY)
+    _text(draw, (70, height - 48), "Created by MiHoYoUID · help card inspired by XutheringWavesUID & miao-plugin", (150, 163, 190), FONT_TINY)
     return await convert_img(img)
 
 

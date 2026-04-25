@@ -30,7 +30,7 @@ def _strip_url(url: str) -> str:
 
 def _headers(token: str = "") -> Dict[str, str]:
     headers = {
-        "User-Agent": "gscore_miao-plugin/0.4",
+        "User-Agent": "MiHoYoUID/0.4",
         "Accept": "application/json",
     }
     if token:
@@ -44,7 +44,7 @@ def _source_headers(source: str) -> Dict[str, str]:
     elif source == "hutao":
         ua = "Snap Hutao/miao"
     else:
-        ua = "gscore_miao-plugin/0.5"
+        ua = "MiHoYoUID/0.5"
     return {"User-Agent": ua, "Accept": "application/json"}
 
 

@@ -1,6 +1,13 @@
-PLUGIN_VERSION = "0.15.10"
+PLUGIN_VERSION = "0.15.11"
 
 CHANGELOGS = [
+    {
+        "version": "0.15.11",
+        "date": "2026-04-26",
+        "items": [
+            "项目与插件包名称统一改为 MiHoYoUID，更新加载入口、元数据、展示文案与请求 User-Agent",
+        ],
+    },
     {
         "version": "0.15.10",
         "date": "2026-04-26",
@@ -92,7 +99,7 @@ CHANGELOGS = [
         "version": "0.14.9",
         "date": "2026-04-25",
         "items": [
-            "内置资源改为 gscore_miao-plugin 适配资源集，移除原版 miao-plugin 不使用的后台、抽卡、Wiki、星铁与大图目录",
+            "内置资源改为 MiHoYoUID 适配资源集，移除原版 miao-plugin 不使用的后台、抽卡、Wiki、星铁与大图目录",
             "面板素材保留当前渲染链路需要的 common、character、help 与 meta-gs 图片/JSON 数据，外部 miao-plugin 目录仅作为可选覆盖",
             "圣遗物评分不再运行时读取原版 artis-mark.js，改为使用插件内置 Python 评分权重与动态规则",
         ],
@@ -102,7 +109,7 @@ CHANGELOGS = [
         "date": "2026-04-25",
         "items": [
             "面板列表角色头像下方补齐橙色排名背景，视觉继续贴近 Yunzai miao-plugin 面板列表",
-            "面板列表底部创建信息改为 Created By Miao-Plugin & gscore_miao-plugin 当前版本 By MeowAndy",
+            "面板列表底部创建信息改为 Created By Miao-Plugin & MiHoYoUID 当前版本 By MeowAndy",
             "喵喵更新日志改为使用转发节点形式发送",
         ],
     },

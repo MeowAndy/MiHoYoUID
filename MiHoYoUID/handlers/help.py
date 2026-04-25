@@ -106,7 +106,7 @@ async def send_version(bot: Bot, ev: Event):
         return
     if not can_use_plugin(ev):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
-    await bot.send(f"gscore_miao-plugin v{PLUGIN_VERSION}")
+    await bot.send(f"MiHoYoUID v{PLUGIN_VERSION}")
 
 
 @sv_help.on_regex(r"^原神(面板|角色面板|角色卡片)\s*(?P<uid>\d{9,10})?$", block=True)

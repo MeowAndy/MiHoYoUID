@@ -1,4 +1,4 @@
-# gscore_miao-plugin 迁移路线
+# MiHoYoUID 迁移路线
 
 目标：尽量对齐 Yunzai 生态的 `miao-plugin`，在 GsCore 中提供相同或等价的命令体验、数据能力、图片渲染和配置项。
 
