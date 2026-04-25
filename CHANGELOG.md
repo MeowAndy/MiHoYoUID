@@ -2,6 +2,11 @@
 
 All notable changes to `gscore_miao-plugin` are documented in this file.
 
+## [0.15.8] - 2026-04-26
+
+### Changed
+- 将单角色面板命座/星魂数量徽章居中放到图标组正上方，优化基础信息区布局。
+
 ## [0.15.7] - 2026-04-26
 
 ### Changed

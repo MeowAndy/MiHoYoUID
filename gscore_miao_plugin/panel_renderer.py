@@ -1353,8 +1353,17 @@ def _draw_basic_panel(img: Image.Image, draw: ImageDraw.ImageDraw, result: Panel
     _text(draw, (x + 20, y + 16), name, (245, 228, 183), FONT_TITLE)
     _text(draw, (x + 22, y + 68), f"UID {result.uid} - Lv.{level}", (232, 232, 232), FONT_TEXT)
     if cons is not None:
-        _rounded_r(draw, (x + 300, y + 68, x + 360, y + 96), 8, (150, 48, 42))
-        _text(draw, (x + 315, y + 72), f"{cons}{'魂' if is_sr else '命'}", (255, 245, 225), FONT_SMALL)
+        cons_text = f"{cons}{'魂' if is_sr else '命'}"
+        cons_icon_size = 40 if is_sr else 36
+        cons_start_x = x + 324
+        cons_step_x = 58
+        cons_group_center_x = cons_start_x + cons_icon_size // 2 + cons_step_x
+        cons_badge_w, cons_badge_h = 60, 28
+        cons_badge_x = cons_group_center_x - cons_badge_w // 2
+        _rounded_r(draw, (cons_badge_x, y + 68, cons_badge_x + cons_badge_w, y + 96), 8, (150, 48, 42))
+        cons_text_box = draw.textbbox((0, 0), cons_text, font=FONT_SMALL)
+        cons_text_w = cons_text_box[2] - cons_text_box[0]
+        _text(draw, (cons_group_center_x - cons_text_w // 2, y + 72), cons_text, (255, 245, 225), FONT_SMALL)
 
     skills = list(char.get("skill_levels") or [])[:3]
     labels = ["普攻", "战技", "终结"] if is_sr else ["普攻", "战技", "爆发"]
