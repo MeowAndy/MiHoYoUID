@@ -169,6 +169,13 @@ PROP_NAME_MAP: Dict[str, str] = {
     "effect_hit_rate": "效果命中",
     "effect_resistance": "效果抵抗",
     "dmg": "伤害加成",
+    "phy": "物理伤害",
+    "fire": "火伤加成",
+    "ice": "冰伤加成",
+    "elec": "雷伤加成",
+    "wind": "风伤加成",
+    "quantum": "量子伤害",
+    "imaginary": "虚数伤害",
     "cpct": "暴击率",
     "cdmg": "暴击伤害",
     "hp": "生命值",
@@ -1145,7 +1152,7 @@ def _artifact_name(rel: Dict[str, Any], fallback: str) -> str:
 
 def _prop_name(value: Any) -> str:
     if isinstance(value, dict):
-        value = value.get("name") or value.get("title") or value.get("appendPropId") or value.get("prop_id") or value.get("key") or value.get("type") or value.get("mainPropId")
+        value = value.get("appendPropId") or value.get("prop_id") or value.get("key") or value.get("field") or value.get("mainPropId") or value.get("name") or value.get("title") or value.get("type")
     text = str(value or "").strip()
     if not text:
         return "主词条"
@@ -1160,7 +1167,7 @@ def _prop_name(value: Any) -> str:
 def _prop_value(value: Any) -> str:
     if not isinstance(value, dict):
         return ""
-    raw = value.get("display") or value.get("value_str") or value.get("valueStr") or value.get("formatted") or value.get("value") or value.get("val") or value.get("statValue") or value.get("base")
+    raw = value.get("display") or value.get("value_str") or value.get("valueStr") or value.get("formatted") or value.get("value") or value.get("val") or value.get("statValue") or value.get("base") or value.get("final")
     if raw is None or raw == "":
         return ""
     raw_text = str(raw).strip()
@@ -1170,7 +1177,7 @@ def _prop_value(value: Any) -> str:
         num = float(raw)
     except (TypeError, ValueError):
         return str(raw)
-    key = str(value.get("appendPropId") or value.get("prop_id") or value.get("key") or value.get("type") or value.get("mainPropId") or value.get("name") or "").upper()
+    key = str(value.get("appendPropId") or value.get("prop_id") or value.get("key") or value.get("field") or value.get("mainPropId") or value.get("type") or value.get("name") or "").upper()
     suffix = "%" if any(x in key for x in ["PERCENT", "CRITICAL", "CRIT", "HURT", "CHARGE", "ADD", "HEAL", "CPCT", "CDMG", "RECHARGE", "DMG", "DAMAGE", "EFFECT", "EFF", "BREAK", "STANCE"]) or any(x in key for x in ["暴击", "伤害", "击破", "效果", "充能", "治疗"]) else ""
     if suffix and 0 < abs(num) < 1:
         num *= 100
@@ -1184,7 +1191,7 @@ def _artifact_prop_score_text(prop: Any, weight: Dict[str, float], game: str = "
         return ""
     try:
         from .artifact_service import _prop_key, _prop_score
-        key = _prop_key(prop.get("appendPropId") or prop.get("prop_id") or prop.get("key") or prop.get("type") or prop.get("mainPropId") or prop.get("name"))
+        key = _prop_key(prop.get("appendPropId") or prop.get("prop_id") or prop.get("key") or prop.get("field") or prop.get("type") or prop.get("mainPropId") or prop.get("name"))
         if not key or weight.get(key, 0) <= 0:
             return ""
         score = prop.get("score")

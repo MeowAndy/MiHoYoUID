@@ -7,6 +7,8 @@ import string
 import time
 import uuid
 from copy import deepcopy
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode, urljoin
 
@@ -65,18 +67,34 @@ def _dig(data: Dict[str, Any], *keys: str) -> Any:
 
 
 def _avatars_from(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    avatars = _dig(data, "avatars", "avatarInfoList", "list", "data.avatars", "data.avatarInfoList", "data.list")
+    def _dedupe(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        ret: Dict[str, Dict[str, Any]] = {}
+        for item in items:
+            key = str(item.get("avatarId") or item.get("AvatarID") or item.get("id") or len(ret))
+            ret[key] = item
+        return list(ret.values())
+
+    avatars = _dig(data, "avatars", "characters", "avatarInfoList", "list", "data.avatars", "data.characters", "data.avatarInfoList", "data.list")
     if isinstance(avatars, list):
-        return avatars
+        return _dedupe([x for x in avatars if isinstance(x, dict)])
+    if isinstance(avatars, dict):
+        return _dedupe([x for x in avatars.values() if isinstance(x, dict)])
     detail = _dig(data, "detailInfo", "data.detailInfo")
     if isinstance(detail, dict):
         merged: List[Dict[str, Any]] = []
-        for key in ("assistAvatarList", "avatarDetailList"):
+        for key in ("assistAvatarList", "assistAvatarDetail", "avatarDetailList", "avatars"):
             value = detail.get(key) or []
+            if isinstance(value, dict):
+                if any(k in value for k in ("avatarId", "AvatarID", "id")):
+                    merged.append(value)
+                    continue
+                value = value.values()
             if isinstance(value, list):
                 merged.extend(x for x in value if isinstance(x, dict))
+            else:
+                merged.extend(x for x in value if isinstance(x, dict))
         if merged:
-            return merged
+            return _dedupe(merged)
     player = _dig(data, "playerDetailInfo", "data.playerDetailInfo")
     if isinstance(player, dict):
         merged = []
@@ -87,7 +105,7 @@ def _avatars_from(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if isinstance(display, list):
             merged.extend(x for x in display if isinstance(x, dict))
         if merged:
-            return merged
+            return _dedupe(merged)
     return []
 
 
@@ -117,6 +135,327 @@ def _name_from_avatar(avatar: Dict[str, Any]) -> str:
         if value:
             return str(value)
     return str(((avatar.get("character") or {}).get("name")) or "")
+
+
+def _plugin_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resource_candidates(*parts: str) -> List[Path]:
+    root = _plugin_root()
+    return [
+        root / "resources" / Path(*parts),
+        root.parent / "miao-plugin" / "resources" / Path(*parts),
+        root.parent / "miao-plugin" / Path(*parts),
+    ]
+
+
+@lru_cache(maxsize=128)
+def _load_resource_json(*parts: str) -> Dict[str, Any]:
+    for path in _resource_candidates(*parts):
+        if not path.exists():
+            continue
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            try:
+                return json.loads(path.read_text(encoding="utf-8-sig"))
+            except Exception:
+                continue
+    return {}
+
+
+@lru_cache(maxsize=1)
+def _sr_artifact_meta() -> Dict[str, Any]:
+    return _load_resource_json("meta-sr", "artifact", "meta.json")
+
+
+@lru_cache(maxsize=1)
+def _sr_artifact_data() -> Dict[str, Any]:
+    return _load_resource_json("meta-sr", "artifact", "data.json")
+
+
+@lru_cache(maxsize=256)
+def _sr_artifact_by_id(item_id: str) -> Dict[str, Any]:
+    if not item_id:
+        return {}
+    for set_data in _sr_artifact_data().values():
+        if not isinstance(set_data, dict):
+            continue
+        for idx, item in (set_data.get("idxs") or {}).items():
+            ids = item.get("ids") if isinstance(item, dict) else {}
+            if isinstance(ids, dict) and item_id in {str(x) for x in ids.keys()}:
+                return {
+                    "set_id": set_data.get("id"),
+                    "set_name": set_data.get("name"),
+                    "idx": int(idx),
+                    "name": item.get("name"),
+                    "star": ids.get(item_id),
+                }
+    return {}
+
+
+@lru_cache(maxsize=256)
+def _sr_character_meta_by_id(avatar_id: str) -> Dict[str, Any]:
+    if not avatar_id:
+        return {}
+    base = _plugin_root()
+    roots = [base / "resources" / "meta-sr" / "character", base.parent / "miao-plugin" / "resources" / "meta-sr" / "character"]
+    for root in roots:
+        if not root.exists():
+            continue
+        for data_path in root.glob("*/data.json"):
+            try:
+                data = json.loads(data_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if str(data.get("id") or "") == str(avatar_id):
+                return data
+    return {}
+
+
+def _sr_prop_key(raw: Any) -> str:
+    text = str(raw or "").strip()
+    mapping = {
+        "hp": "hp",
+        "max_hp": "hp",
+        "hp_pct": "hp",
+        "hppercent": "hp",
+        "atk": "atk",
+        "attack": "atk",
+        "atk_pct": "atk",
+        "attackpercent": "atk",
+        "def": "def",
+        "defense": "def",
+        "def_pct": "def",
+        "speed": "speed",
+        "spd": "speed",
+        "crit_rate": "cpct",
+        "critical_chance": "cpct",
+        "cpct": "cpct",
+        "crit_dmg": "cdmg",
+        "crit_damage": "cdmg",
+        "cdmg": "cdmg",
+        "break_effect": "stance",
+        "break_dmg": "stance",
+        "stance": "stance",
+        "effect_hit": "effPct",
+        "effect_hit_rate": "effPct",
+        "effpct": "effPct",
+        "effect_res": "effDef",
+        "effect_resistance": "effDef",
+        "effdef": "effDef",
+        "energy_recharge": "recharge",
+        "energy_recovery": "recharge",
+        "recharge": "recharge",
+        "heal": "heal",
+        "healing_boost": "heal",
+        "dmg": "dmg",
+        "damage": "dmg",
+        "damage_boost": "dmg",
+        "phy": "phy",
+        "fire": "fire",
+        "ice": "ice",
+        "elec": "elec",
+        "wind": "wind",
+        "quantum": "quantum",
+        "imaginary": "imaginary",
+        "hpplus": "hpPlus",
+        "atkplus": "atkPlus",
+        "defplus": "defPlus",
+    }
+    return mapping.get(text, mapping.get(text.lower(), text))
+
+
+def _sr_prop_display_value(key: str, value: Any) -> str:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return str(value or "")
+    if key in {"hp", "atk", "def", "cpct", "cdmg", "stance", "effPct", "effDef", "recharge", "heal", "dmg"}:
+        return f"{num:.1f}%" if abs(num - round(num)) >= 0.01 else f"{round(num)}%"
+    return f"{num:.1f}" if abs(num - round(num)) >= 0.01 else str(round(num))
+
+
+def _sr_relic_attr(main_id: Any = None, sub: Optional[Dict[str, Any]] = None, level: int = 0, star: int = 5, idx: int = 1) -> Dict[str, Any]:
+    meta = _sr_artifact_meta()
+    star_data = (meta.get("starData") or {}).get(str(star)) or (meta.get("starData") or {}).get("5") or {}
+    if main_id not in (None, ""):
+        main_key = (((meta.get("mainIdx") or {}).get(str(idx)) or {}).get(str(main_id)))
+        main_cfg = ((star_data.get("main") or {}).get(main_key) or {}) if main_key else {}
+        if not main_key or not main_cfg:
+            return {"key": str(main_id), "appendPropId": str(main_id), "value": "", "display": ""}
+        value = float(main_cfg.get("base") or 0) + float(main_cfg.get("step") or 0) * max(level, 0)
+        return {"key": main_key, "appendPropId": main_key, "value": value, "display": _sr_prop_display_value(main_key, value)}
+    sub = sub or {}
+    affix_id = sub.get("affixId") or sub.get("affix_id") or sub.get("id")
+    sub_cfg = (star_data.get("sub") or {}).get(str(affix_id)) or {}
+    key = sub_cfg.get("key") or str(affix_id or "")
+    cnt = _to_int(sub.get("cnt") or sub.get("count"), 1)
+    step = _to_int(sub.get("step"), 0)
+    value = float(sub_cfg.get("base") or 0) * cnt + float(sub_cfg.get("step") or 0) * step
+    base = float(sub_cfg.get("base") or 0)
+    step_base = float(sub_cfg.get("step") or 0)
+    eff_base = base + step_base * 2
+    eff = value / eff_base if eff_base else 0
+    return {
+        "key": key,
+        "appendPropId": key,
+        "id": affix_id,
+        "value": value,
+        "display": _sr_prop_display_value(key, value),
+        "cnt": cnt,
+        "count": cnt,
+        "step": step,
+        "upNum": cnt,
+        "eff": eff,
+    }
+
+
+def _sr_weapon_attrs(weapon: Dict[str, Any]) -> Dict[str, Any]:
+    attrs = weapon.get("attrs") or weapon.get("attributes") or weapon.get("properties") or weapon.get("stats") or {}
+    if isinstance(attrs, dict) and attrs:
+        return attrs
+    item_id = str(weapon.get("item_id") or weapon.get("itemId") or weapon.get("id") or weapon.get("tid") or "")
+    weapon_index = _load_resource_json("meta-sr", "weapon", "data.json")
+    name = ""
+    type_name = ""
+    if item_id and isinstance(weapon_index.get(item_id), dict):
+        name = str(weapon_index[item_id].get("name") or "")
+        type_name = str(weapon_index[item_id].get("type") or "")
+    detail = _load_resource_json("meta-sr", "weapon", type_name, name, "data.json") if name and type_name else {}
+    attr = detail.get("attr") if isinstance(detail.get("attr"), dict) else {}
+    promote = str(weapon.get("promote") or weapon.get("promote_level") or weapon.get("promotion") or "")
+    level = _to_int(weapon.get("level") or weapon.get("lv"), 0)
+    best = attr.get(promote) if promote else None
+    if not isinstance(best, dict):
+        candidates = [x for x in attr.values() if isinstance(x, dict)]
+        candidates.sort(key=lambda x: abs(_to_int(x.get("maxLevel"), level) - level))
+        best = candidates[0] if candidates else {}
+    return (best.get("attrs") or {}) if isinstance(best, dict) else {}
+
+
+def _sr_weapon_from_avatar(avatar: Dict[str, Any]) -> Dict[str, Any]:
+    weapon = avatar.get("light_cone") or avatar.get("lightCone") or avatar.get("equipment") or avatar.get("weapon") or {}
+    if not isinstance(weapon, dict):
+        return {}
+    item_id = weapon.get("item_id") or weapon.get("itemId") or weapon.get("id") or weapon.get("tid")
+    weapon_index = _load_resource_json("meta-sr", "weapon", "data.json")
+    meta = weapon_index.get(str(item_id)) if isinstance(weapon_index.get(str(item_id)), dict) else {}
+    return {
+        "item_id": item_id,
+        "name": weapon.get("name") or weapon.get("weapon_name") or weapon.get("weaponName") or meta.get("name"),
+        "level": weapon.get("level") or weapon.get("lv"),
+        "promote_level": weapon.get("promote") or weapon.get("promote_level") or weapon.get("promotion"),
+        "refine": weapon.get("affix") or weapon.get("refine") or weapon.get("rank") or weapon.get("affix_level"),
+        "rarity": weapon.get("star") or weapon.get("rarity") or meta.get("star"),
+        "attrs": _sr_weapon_attrs({**weapon, "item_id": item_id}),
+        "game": "sr",
+    }
+
+
+def _sr_reliquaries_from_avatar(avatar: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = avatar.get("reliquaries") or avatar.get("artifacts") or avatar.get("artis") or avatar.get("relicList") or avatar.get("relics") or []
+    if isinstance(raw, dict):
+        iterable = raw.values()
+    elif isinstance(raw, list):
+        iterable = raw
+    else:
+        iterable = []
+    reliqs: List[Dict[str, Any]] = []
+    for item in iterable:
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("item_id") or item.get("itemId") or item.get("id") or item.get("tid") or "")
+        meta = _sr_artifact_by_id(item_id)
+        idx = _to_int(item.get("type") or item.get("pos") or item.get("idx") or meta.get("idx"), len(reliqs) + 1)
+        star = _to_int(item.get("star") or item.get("rarity") or meta.get("star"), 5)
+        level = _to_int(item.get("level") or item.get("lv"), 0)
+        main = item.get("main_prop") or item.get("mainProp") or item.get("main_affix") or item.get("mainAffix") or item.get("mainstat") or item.get("main")
+        if isinstance(main, dict):
+            main_prop = _norm_relic_prop(main)
+        else:
+            main_id = item.get("mainAffixId") or item.get("main_affix_id") or item.get("mainId") or item.get("mainPropId") or main
+            main_prop = _sr_relic_attr(main_id=main_id, level=level, star=star, idx=idx)
+        sub_raw = item.get("sub_props") or item.get("substats") or item.get("subStats") or item.get("sub_affix") or item.get("subAffix") or item.get("subAffixList") or item.get("sub_affix_id") or item.get("attrs") or []
+        sub_props = [_sr_relic_attr(sub=x, star=star) if isinstance(x, dict) and (x.get("affixId") or x.get("affix_id") or x.get("id")) else _norm_relic_prop(x) for x in sub_raw]
+        reliqs.append(
+            {
+                "item_id": item_id,
+                "name": item.get("name") or meta.get("name"),
+                "set_name": item.get("set") or item.get("set_name") or item.get("setName") or meta.get("set_name"),
+                "pos": idx,
+                "level": level,
+                "rarity": star,
+                "main_prop": main_prop,
+                "sub_props": sub_props,
+                "game": "sr",
+            }
+        )
+    return reliqs
+
+
+def _sr_fight_props_from_avatar(avatar: Dict[str, Any]) -> Dict[str, Any]:
+    props = _props_from_avatar(avatar)
+    if props:
+        return props
+    avatar_id = str(avatar.get("avatarId") or avatar.get("AvatarID") or avatar.get("id") or avatar.get("avatar_id") or "")
+    meta = _sr_character_meta_by_id(avatar_id)
+    base_attr = meta.get("baseAttr") if isinstance(meta.get("baseAttr"), dict) else {}
+    weapon_attrs = _sr_weapon_from_avatar(avatar).get("attrs") or {}
+    totals: Dict[str, float] = {
+        "hp": float(base_attr.get("hp") or 0) + float(weapon_attrs.get("hp") or 0),
+        "atk": float(base_attr.get("atk") or 0) + float(weapon_attrs.get("atk") or 0),
+        "def": float(base_attr.get("def") or 0) + float(weapon_attrs.get("def") or 0),
+        "speed": float(base_attr.get("speed") or 0),
+        "cpct": float(base_attr.get("cpct") or 5),
+        "cdmg": float(base_attr.get("cdmg") or 50),
+        "stance": 0.0,
+        "effPct": 0.0,
+        "effDef": 0.0,
+        "recharge": 100.0,
+        "heal": 0.0,
+        "dmg": 0.0,
+    }
+    pct_bonus = {"hp": 0.0, "atk": 0.0, "def": 0.0}
+    flat_bonus = {"hp": 0.0, "atk": 0.0, "def": 0.0}
+    for relic in _sr_reliquaries_from_avatar(avatar):
+        for prop in [relic.get("main_prop"), *(relic.get("sub_props") or [])]:
+            if not isinstance(prop, dict):
+                continue
+            key = _sr_prop_key(prop.get("key") or prop.get("appendPropId"))
+            try:
+                value = float(prop.get("value") or 0)
+            except (TypeError, ValueError):
+                continue
+            if key == "hpPlus":
+                flat_bonus["hp"] += value
+            elif key == "atkPlus":
+                flat_bonus["atk"] += value
+            elif key == "defPlus":
+                flat_bonus["def"] += value
+            elif key in pct_bonus:
+                pct_bonus[key] += value
+            elif key in totals:
+                totals[key] += value
+            elif key in {"phy", "fire", "ice", "elec", "wind", "quantum", "imaginary"}:
+                totals["dmg"] = max(totals["dmg"], value)
+    for key in ("hp", "atk", "def"):
+        totals[key] = totals[key] * (1 + pct_bonus[key] / 100) + flat_bonus[key]
+    return {
+        "生命值": round(totals["hp"]),
+        "攻击力": round(totals["atk"]),
+        "防御力": round(totals["def"]),
+        "速度": round(totals["speed"], 1),
+        "暴击率": round(totals["cpct"], 1),
+        "暴击伤害": round(totals["cdmg"], 1),
+        "伤害加成": round(totals["dmg"], 1),
+        "击破特攻": round(totals["stance"], 1),
+        "效果命中": round(totals["effPct"], 1),
+        "效果抵抗": round(totals["effDef"], 1),
+        "能量恢复效率": round(totals["recharge"], 1),
+        "治疗加成": round(totals["heal"], 1),
+    }
 
 
 def _normalize_prop_name(name: Any) -> str:
@@ -398,20 +737,23 @@ def _characters_from_avatars(avatars: List[Dict[str, Any]], game: str = "gs") ->
         if not isinstance(avatar, dict):
             continue
         base = avatar.get("base") if isinstance(avatar.get("base"), dict) else avatar
+        is_sr = game in {"sr", "starrail", "hkrpg"}
+        avatar_id = base.get("id") or avatar.get("id") or avatar.get("avatar_id") or avatar.get("avatarId") or avatar.get("AvatarID")
+        sr_meta = _sr_character_meta_by_id(str(avatar_id or "")) if is_sr else {}
         characters.append(
             {
-                "avatar_id": base.get("id") or avatar.get("id") or avatar.get("avatar_id") or avatar.get("avatarId"),
-                "name": base.get("name") or _name_from_avatar(avatar),
-                "element": base.get("element") or avatar.get("element"),
-                "rarity": base.get("rarity") or avatar.get("rarity"),
+                "avatar_id": avatar_id,
+                "name": base.get("name") or _name_from_avatar(avatar) or sr_meta.get("name"),
+                "element": base.get("element") or avatar.get("element") or sr_meta.get("elem"),
+                "rarity": base.get("rarity") or avatar.get("rarity") or sr_meta.get("star"),
                 "level": base.get("level") or avatar.get("level") or avatar.get("lv"),
-                "promote_level": base.get("promote_level") or avatar.get("promote") or avatar.get("promote_level"),
-                "constellation": base.get("actived_constellation_num") or avatar.get("cons") or avatar.get("constellation") or avatar.get("actived_constellation_num"),
+                "promote_level": base.get("promote_level") or avatar.get("promote") or avatar.get("promote_level") or avatar.get("promotion"),
+                "constellation": base.get("actived_constellation_num") or avatar.get("cons") or avatar.get("constellation") or avatar.get("actived_constellation_num") or avatar.get("rank") or 0,
                 "friendship": base.get("fetter") or avatar.get("fetter") or avatar.get("friendship"),
-                "skill_levels": _mys_skill_levels(avatar) or avatar.get("skill_levels") or avatar.get("talent") or avatar.get("talents") or [],
-                "weapon": _weapon_from_avatar(avatar),
-                "reliquaries": _mys_reliquaries(avatar) or _reliquaries_from_avatar(avatar),
-                "fight_props": _mys_fight_props(avatar),
+                "skill_levels": _mys_skill_levels(avatar) or avatar.get("skill_levels") or avatar.get("talent") or avatar.get("talents") or [x.get("level") or x.get("Level") for x in avatar.get("skillTreeList") or [] if isinstance(x, dict) and (x.get("level") or x.get("Level"))],
+                "weapon": _sr_weapon_from_avatar(avatar) if is_sr else _weapon_from_avatar(avatar),
+                "reliquaries": (_sr_reliquaries_from_avatar(avatar) if is_sr else (_mys_reliquaries(avatar) or _reliquaries_from_avatar(avatar))),
+                "fight_props": _sr_fight_props_from_avatar(avatar) if is_sr else _mys_fight_props(avatar),
                 "game": game,
             }
         )

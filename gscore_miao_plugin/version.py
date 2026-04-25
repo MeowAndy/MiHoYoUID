@@ -1,6 +1,15 @@
-PLUGIN_VERSION = "0.15.1"
+PLUGIN_VERSION = "0.15.2"
 
 CHANGELOGS = [
+    {
+        "version": "0.15.2",
+        "date": "2026-04-25",
+        "items": [
+            "修复 Mihomo/Avocado/EnkaHSR 星铁面板数据标准化，按 miao-plugin 逻辑解析角色、光锥与遗器字段",
+            "星铁遗器改为根据 mainAffixId/subAffixList 与 meta-sr/artifact 反算主副词条数值，评分不再显示 0.0",
+            "星铁角色详情补齐生命、攻击、防御、速度、双暴、击破、命中、抵抗等属性估算，光锥补齐 hp/atk/def 属性",
+        ],
+    },
     {
         "version": "0.15.1",
         "date": "2026-04-25",

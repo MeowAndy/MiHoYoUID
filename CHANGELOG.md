@@ -2,6 +2,27 @@
 
 All notable changes to `gscore_miao-plugin` are documented in this file.
 
+## [0.15.2] - 2026-04-25
+
+### Fixed
+- 修复 Mihomo/Avocado/EnkaHSR 星铁面板源字段标准化，角色详情属性区不再全部为空。
+- 星铁光锥根据 `meta-sr/weapon` 补齐 `hp` / `atk` / `def` 属性。
+- 星铁遗器根据 `mainAffixId` / `subAffixList` 与 `meta-sr/artifact` 反算主副词条真实数值。
+- 星铁遗器评分接入真实副词条，单件分和总分不再固定显示 `0.0`。
+
+## [0.15.1] - 2026-04-25
+
+### Added
+- 新增 `喵喵崩铁帮助` / `喵喵崩铁菜单`，开始铺设崩坏：星穹铁道命令域。
+
+### Fixed
+- 星铁单角色面板补齐属性数值、星魂图标、遗器主副词条数值与副词条评分的渲染入口。
+
+## [0.15.0] - 2026-04-25
+
+### Changed
+- 原神功能命令统一增加 `喵喵原神...` 命令域，为后续 `喵喵崩铁...` 命令预留空间。
+
 ## [0.14.8] - 2026-04-25
 
 ### Changed
