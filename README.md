@@ -1,12 +1,16 @@
-# MiHoYoUID
+# 🌟 MiHoYoUID
 
-将 Yunzai `miao-plugin` 迁移为可在 GsCore 运行的插件。
+把 Yunzai 生态的 `miao-plugin` 体验迁移到 GsCore 的 Python 插件。
 
-## 已移植能力（v0.15.20）
+> 📦 GitHub：<https://github.com/MeowAndy/MiHoYoUID>
+>
+> 🎮 当前主要维护 **原神** 与 **崩坏：星穹铁道** 两个板块。
+
+## ✨ 已移植能力（v0.15.20）
 
 `MiHoYoUID` 保留同一个插件包，功能与文档按 **原神** / **崩铁** 两个板块维护。
 
-### 通用能力
+### 🧩 通用能力
 
 - 帮助入口：`喵喵帮助` 会提示选择 `喵喵原神帮助` 或 `喵喵崩铁帮助`，前缀跟随 WebUI 配置动态变化；强制前缀内置 `喵喵` / `miao` / `MM`。
 - 米游社登录与签到：`喵喵登录`、`喵喵扫码登录`、`喵喵签到`，登录成功以图片卡片展示绑定角色，签到同时尝试原神与崩坏：星穹铁道；自动签到默认每天 00:30 执行。
@@ -14,7 +18,7 @@
 - 状态页：注册 GsCore 插件状态统计。
 - 配置管理：通过 GsCore WebUI 管理插件配置、面板源、渲染模式、缓存、登录与签到等设置。
 
-### 原神板块
+### 🍃 原神板块
 
 - 帮助：`喵喵原神帮助` / `喵喵原神菜单`
 - 版本：`喵喵原神版本`
@@ -48,7 +52,7 @@
 - miao-plugin 风格角色命令：`喵喵原神雷神面板 <UID>` / `喵喵原神雷神圣遗物 <UID>` / `喵喵原神雷神伤害 <UID>`
 - 角色别名：`喵喵原神角色别名 <角色/别名>`
 
-### 崩铁板块
+### 🚄 崩铁板块
 
 - 帮助：`喵喵崩铁帮助` / `喵喵崩铁菜单`
 - 更新日志：`喵喵崩铁更新日志` / `喵喵星铁更新日志`，只展示崩铁功能更新，数据维护在 `STAR_RAIL_CHANGELOGS`。
@@ -70,7 +74,7 @@
 - 统计说明：星铁公开持有率接口不可用时会给出明确提示，不会误返回原神角色数据。
 - 资料与规划入口：星铁光锥图鉴、资料图鉴与养成材料命令域已按 miao-plugin 风格铺设，未完成的能力会明确提示当前适配状态。
 
-### WebUI 配置项（GsCore 网页控制台）
+### ⚙️ WebUI 配置项（GsCore 网页控制台）
 
   - EnableHelp
   - EnableVersion
@@ -124,7 +128,7 @@
   - EnableSettingReset
   - MaxCommaGroup
 
-## 目录
+## 📁 目录
 
 - `MiHoYoUID/` 插件主体
 - `MiHoYoUID/config_default.py` WebUI 配置模型
@@ -132,29 +136,59 @@
 - `MiHoYoUID/database.py` WebUI 数据表映射（用户配置/历史）
 - `MiHoYoUID/status.py` GsCore 状态页注册
 
-## 安装
+## 🚀 安装教程
 
-将本目录放入 GsCore 插件目录，重启 GsCore 后即可加载：
+### 方式一：Git 克隆（推荐）
+
+1. 进入 GsCore 的插件目录，一般是 `gsuid_core/plugins`。
+2. 克隆本仓库：`git clone https://github.com/MeowAndy/MiHoYoUID.git`
+3. 进入插件目录后安装依赖：`pip install -r requirements.txt`
+4. 重启 GsCore。
+5. 发送 `喵喵帮助`，如果能看到原神 / 崩铁菜单，就说明加载成功。
+
+### 方式二：下载 ZIP
+
+1. 打开 <https://github.com/MeowAndy/MiHoYoUID>
+2. 点击 `Code` → `Download ZIP`。
+3. 解压后把文件夹放到 GsCore 的 `plugins` 目录。
+4. 确认文件夹名称为 `MiHoYoUID`。
+5. 在该目录安装依赖：`pip install -r requirements.txt`。
+6. 重启 GsCore，然后发送 `喵喵帮助` 测试。
+
+### 安装后需要知道
 
 - 插件名：`MiHoYoUID`
-- 强制前缀：`喵喵` / `miao` / `MM`
+- 默认强制前缀：`喵喵` / `miao` / `MM`
+- 配置入口：GsCore WebUI
 - 配置文件：GsCore 资源目录下的 `GsCoreMiao/config.json`
+- 可选素材目录：如果本机也有 Yunzai `miao-plugin`，可以在 WebUI 把 `MiaoPluginResourcePath` 指向它，用于复用角色立绘、图标等资源。
 
-## 说明
+### 常见问题
 
-原 `miao-plugin` 为 Yunzai 生态（Node.js）插件，和 GsCore（Python）运行时差异较大。
-当前版本为 **功能语义迁移（v0.15.20）**，重点迁移命令形态、UID 绑定、面板管理入口、配置管理、更新日志、基础权限控制、面板数据源、图片模板、角色别名、圣遗物/遗器评分、登录签到、抽卡统计、公开统计与原神/星铁命令域。
-Miao API 已对齐 `profile/data` 参数，米游社源已实现 `index` + `character/list` 与 DS 签名流程，Enka 源已解析角色详情摘要；星铁侧已接入 Mihomo、Avocado、EnkaHSR 数据源；`PanelRenderMode=image` 可输出 miao-plugin 风格角色面板图片。
-插件默认使用内置适配资源集；如需调试或覆盖素材，可在 WebUI 将 `MiaoPluginResourcePath` 指向本地 Yunzai `miao-plugin` 目录，插件会尝试读取 `resources/meta-gs` 与 `resources/meta-sr` 下的角色立绘、武器/光锥图标、圣遗物/遗器图标、命座/星魂与天赋/行迹图标；素材缺失时会自动使用占位/文本回退，避免无响应。
-圣遗物/遗器评分权重已改为独立角色规则目录，默认权重通过 `tools/sync_miao_artifact_rules.py` 从 miao-plugin `resources/meta-gs|meta-sr/artifact/artis-mark.js` 同步生成；本版补齐部位满分、套装/部位字段兼容与星铁 6 部位主词条计分。星铁面板已按 miao-plugin 的 Mihomo/Avocado/EnkaHSR 适配思路补齐角色详情属性、光锥 hp/atk/def、遗器 mainAffixId/subAffixList 反算主副词条数值与副词条评分。伤害估算已升级为逐角色模板 + 通用公式混合模式，并支持敌人等级、防御区、抗性区、反应/击破、组队关键词、武器/光锥与套装/遗器收益折算，后续可继续按 miao-plugin calc.js 精细化单角色轴伤。
-更新日志已拆分为原神与崩铁两套记录：更新原神功能时维护 `GENSHIN_CHANGELOGS`，更新崩铁功能时维护 `STAR_RAIL_CHANGELOGS`；共享能力可同时写入两边。
-后续完整迁移路线见 `MIGRATION_PLAN.md`。
+- 没反应：先确认插件目录是否放对，然后重启 GsCore。
+- 缺图片：检查 `MiaoPluginResourcePath` 是否配置正确；不配置也能用，会自动占位回退。
+- 命令不匹配：优先使用 `喵喵原神帮助` 或 `喵喵崩铁帮助` 查看当前支持的命令。
+- 更新后没生效：需要重启或热重载 GsCore。
 
-## 更新日志（内置）
+## 📝 说明
+
+`miao-plugin` 原本是 Yunzai 生态的 Node.js 插件，`MiHoYoUID` 是面向 GsCore 的 Python 迁移版。两边运行环境不同，所以这里以“功能语义迁移”为主，不追求完全复制原版代码结构。
+
+当前版本重点覆盖：命令入口、UID 绑定、面板管理、WebUI 配置、更新日志、权限控制、面板数据源、图片渲染、角色别名、圣遗物/遗器评分、登录签到、抽卡统计、公开统计，以及原神 / 崩铁命令域。
+
+数据源方面：原神已接入 Miao、Enka、米游社、Mgg、胡桃等面板来源；崩铁已接入 Mihomo、Avocado、EnkaHSR 等面板来源。`PanelRenderMode=image` 可输出接近 miao-plugin 风格的角色面板图。
+
+资源方面：插件自带适配资源，也可以复用本地 Yunzai `miao-plugin/resources`。缺少素材时会自动使用占位或文本回退，避免命令卡死。
+
+评分与伤害方面：圣遗物 / 遗器权重已拆成独立规则目录，支持原神与崩铁基础评分；伤害估算采用“逐角色模板 + 通用公式”混合模式，后续会继续向 miao-plugin 的 `calc.js` 细化。
+
+更新日志已拆分为原神与崩铁两套：原神维护 `GENSHIN_CHANGELOGS`，崩铁维护 `STAR_RAIL_CHANGELOGS`。完整迁移路线见 `MIGRATION_PLAN.md`。
+
+## 📌 更新日志（内置）
 
 完整变更记录见 `CHANGELOG.md`。README 只保留按游戏拆分后的重点更新；插件内命令同样按游戏读取 `GENSHIN_CHANGELOGS` 与 `STAR_RAIL_CHANGELOGS`。
 
-### 原神更新日志
+### 🍃 原神更新日志
 
 - v0.15.20
   - 新增原神今日/明日/周几素材图片卡，图片内展示对应天赋与武器突破素材图标
@@ -211,7 +245,7 @@ Miao API 已对齐 `profile/data` 参数，米游社源已实现 `index` + `char
   - miao-plugin 风格角色命令改为 `喵喵原神雷神面板/圣遗物/伤害`
   - `喵喵签到` 保持不变，继续统一处理原神与崩铁米游社签到
 
-### 崩铁更新日志
+### 🚄 崩铁更新日志
 
 - v0.15.20
   - 移除绝区零日历预留入口，当前 README 与命令域只保留原神和崩铁
