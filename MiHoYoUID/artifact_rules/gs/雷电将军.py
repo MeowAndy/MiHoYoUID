@@ -1,0 +1,11 @@
+from __future__ import annotations
+
+from typing import Any, Dict, Tuple
+
+CHARACTER_NAME = '雷电将军'
+BASE_WEIGHT: Dict[str, float] = {'atk': 75.0, 'cpct': 100.0, 'cdmg': 100.0, 'mastery': 0.0, 'dmg': 75.0, 'recharge': 90.0}
+
+
+def get_rule(char: Dict[str, Any], context: Dict[str, Any]) -> Tuple[str, Dict[str, float]]:
+    """Return the miao-plugin artifact score rule for this character."""
+    return context.get('default_title') or f"{CHARACTER_NAME}-通用", dict(BASE_WEIGHT)

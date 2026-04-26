@@ -1,4 +1,4 @@
 name: MiHoYoUID
-version: 0.11.0
+version: 0.15.15
 author: GitHub Copilot
 desc: miao-plugin 的 GsCore 迁移版（含 WebUI 配置、图片面板、圣遗物评分、伤害估算、角色别名与面板数据源）

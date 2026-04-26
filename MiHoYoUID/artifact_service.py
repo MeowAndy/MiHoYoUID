@@ -3,68 +3,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 from .alias_data import resolve_alias
+from .artifact_rules import load_rule
 from .panel_models import PanelResult
 from .panel_renderer import CHARACTER_ID_NAMES
 
 DEFAULT_WEIGHT = {"atk": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "phy": 100}
-DEFAULT_SR_WEIGHT = {"atk": 75, "speed": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "stance": 50, "recharge": 50}
-
-CHARACTER_WEIGHTS: Dict[str, Dict[str, float]] = {
-    "芭芭拉": {"hp": 100, "atk": 50, "cpct": 50, "cdmg": 50, "dmg": 80, "recharge": 55, "heal": 100},
-    "甘雨": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 75, "dmg": 100},
-    "雷电将军": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 0, "dmg": 75, "recharge": 90},
-    "八重神子": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 75, "dmg": 75, "recharge": 55},
-    "申鹤": {"atk": 100, "cpct": 50, "cdmg": 50, "dmg": 80, "recharge": 100},
-    "云堇": {"atk": 75, "def": 100, "cpct": 80, "cdmg": 80, "dmg": 80, "recharge": 80},
-    "荒泷一斗": {"atk": 50, "def": 100, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 30},
-    "班尼特": {"hp": 100, "atk": 50, "cpct": 50, "cdmg": 50, "dmg": 80, "recharge": 100, "heal": 100},
-    "枫原万叶": {"atk": 50, "cpct": 50, "cdmg": 50, "mastery": 100, "dmg": 80, "recharge": 55},
-    "行秋": {"atk": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 75},
-    "钟离": {"hp": 100, "atk": 30, "cpct": 40, "cdmg": 40, "dmg": 80, "recharge": 55},
-    "神里绫华": {"atk": 85, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 45},
-    "香菱": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 75, "dmg": 100, "recharge": 75},
-    "胡桃": {"hp": 80, "atk": 50, "cpct": 100, "cdmg": 100, "mastery": 75, "dmg": 100},
-    "温迪": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 30, "dmg": 100, "recharge": 45},
-    "珊瑚宫心海": {"hp": 100, "atk": 50, "mastery": 75, "dmg": 100, "recharge": 55, "heal": 100},
-    "阿贝多": {"def": 75, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "优菈": {"atk": 75, "cpct": 100, "cdmg": 100, "dmg": 40, "phy": 100, "recharge": 55},
-    "夜兰": {"hp": 80, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 55},
-    "纳西妲": {"atk": 55, "cpct": 100, "cdmg": 100, "mastery": 100, "dmg": 100, "recharge": 55},
-    "艾尔海森": {"atk": 55, "cpct": 100, "cdmg": 100, "mastery": 100, "dmg": 100, "recharge": 35},
-    "那维莱特": {"hp": 100, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 55},
-    "芙宁娜": {"hp": 100, "cpct": 100, "cdmg": 100, "dmg": 95, "recharge": 75, "heal": 95},
-    "娜维娅": {"atk": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 55},
-    "阿蕾奇诺": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 75, "dmg": 100, "recharge": 30},
-    "玛薇卡": {"atk": 75, "cpct": 100, "cdmg": 100, "mastery": 85, "dmg": 100},
-}
-
-STAR_RAIL_CHARACTER_WEIGHTS: Dict[str, Dict[str, float]] = {
-    "黄泉": {"atk": 100, "speed": 75, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "流萤": {"atk": 100, "speed": 100, "stance": 100, "effDef": 30},
-    "卡芙卡": {"atk": 100, "speed": 100, "effPct": 75, "dmg": 100, "stance": 50},
-    "黑天鹅": {"atk": 100, "speed": 75, "effPct": 100, "dmg": 100},
-    "刃": {"hp": 100, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "镜流": {"atk": 75, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "丹恒•饮月": {"atk": 75, "speed": 50, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "希儿": {"atk": 75, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "景元": {"atk": 75, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100},
-    "飞霄": {"atk": 75, "speed": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 100},
-    "真理医生": {"atk": 75, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 50},
-    "波提欧": {"speed": 100, "stance": 100, "cpct": 50, "cdmg": 50, "dmg": 50},
-    "乱破": {"atk": 100, "speed": 100, "stance": 100, "effDef": 30},
-    "砂金": {"def": 100, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100, "recharge": 75, "effDef": 50},
-    "符玄": {"hp": 100, "speed": 100, "cpct": 100, "cdmg": 100, "dmg": 100, "effDef": 50},
-    "藿藿": {"hp": 100, "speed": 75, "heal": 100, "recharge": 100, "effDef": 50},
-    "罗刹": {"atk": 100, "speed": 100, "heal": 100, "recharge": 100, "cpct": 100, "cdmg": 100},
-    "灵砂": {"atk": 75, "speed": 100, "stance": 100, "heal": 100, "recharge": 100},
-    "知更鸟": {"atk": 100, "speed": 100, "recharge": 100, "hp": 75, "def": 75, "effDef": 50},
-    "花火": {"hp": 75, "def": 75, "speed": 100, "cdmg": 100, "recharge": 100, "effDef": 50},
-    "星期日": {"hp": 75, "def": 75, "speed": 100, "cdmg": 100, "recharge": 100, "effDef": 50},
-    "阮•梅": {"hp": 75, "def": 75, "speed": 100, "stance": 100, "recharge": 100, "effDef": 50},
-    "银狼": {"atk": 75, "speed": 100, "cpct": 100, "cdmg": 100, "effPct": 100, "recharge": 75},
-    "椒丘": {"hp": 75, "atk": 50, "def": 75, "speed": 100, "effPct": 100, "effDef": 50},
-    "停云": {"atk": 100, "speed": 100, "recharge": 100, "hp": 50},
-}
+DEFAULT_SR_WEIGHT = {"atk": 75, "cpct": 100, "cdmg": 100, "dmg": 100, "speed": 100}
 PROP_KEY_MAP = {
     "FIGHT_PROP_HP": "hp",
     "FIGHT_PROP_HP_PERCENT": "hp",
@@ -313,17 +257,24 @@ def _artifact_pos_index(reliq: Dict[str, Any], fallback_idx: int = 0) -> int:
 
 def _weight_for_char(char: Dict[str, Any]) -> Tuple[str, Dict[str, float]]:
     name = _char_name(char)
-    is_sr = char.get("game") in {"sr", "starrail", "hkrpg"}
+    game = "sr" if char.get("game") in {"sr", "starrail", "hkrpg"} else "gs"
+    is_sr = game == "sr"
     weight = dict(DEFAULT_SR_WEIGHT if is_sr else DEFAULT_WEIGHT)
-    weight.update((STAR_RAIL_CHARACTER_WEIGHTS if is_sr else CHARACTER_WEIGHTS).get(name, {}))
 
-    # 使用本插件适配后的常见动态评分规则。
     weapon_name = _weapon_name(char)
     refine = max(min(_weapon_refine(char), 5), 1)
     sets = _artifact_sets(char)
-    title = f"{name}-{'星铁通用' if is_sr else '通用'}"
+    title = f"{name}-通用"
+    rule = load_rule(game, name)
+    if rule:
+        try:
+            title, rule_weight = rule(char, {"default_title": title, "weapon_name": weapon_name, "refine": refine, "sets": sets, "game": game, "is_sr": is_sr})
+            weight.update(rule_weight)
+        except Exception:
+            pass
     if is_sr:
         return title, weight
+    # miao-plugin 的通用动态规则：武器/套装修正。更细的角色流派规则可在 artifact_rules/gs/<角色>.py 单独维护。
     if name == "雷电将军" and weapon_name == "薙草之稻光" and refine >= 3:
         weight.update({"atk": 90, "cpct": 100, "cdmg": 100, "dmg": 90, "recharge": 90})
         title = "雷神-高精"

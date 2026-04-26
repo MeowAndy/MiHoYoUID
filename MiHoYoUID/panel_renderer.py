@@ -11,9 +11,11 @@ from gsuid_core.utils.image.convert import convert_img
 from PIL import Image, ImageDraw, ImageFont
 
 from .config import MiaoConfig
+from .light_cone_effects import get_light_cone_effect
 from .panel_models import PanelResult
 
 Color = Tuple[int, int, int]
+WIKI_PAGE_MAX_HEIGHT = 1800
 
 CHARACTER_ID_NAMES: Dict[int, str] = {
     10000002: "神里绫华",
@@ -298,6 +300,11 @@ FONT_PROFILE_SMALL = _font(13, False, "HYWH-65W.ttf")
 FONT_PROFILE_NAME = _font(18, True, "HYWH-65W.ttf")
 FONT_PROFILE_CONS = _font(12, True, "HYWH-65W.ttf")
 FONT_PROFILE_CREDIT = _font(18, True, "NZBZ.ttf")
+FONT_ARTIFACT_RANK = _font(30, True, "NZBZ.ttf")
+FONT_LIGHT_CONE_EFFECT = _font(13, False, "HYWH-65W.ttf")
+FONT_LIGHT_CONE_EFFECT_SMALL = _font(12, False, "HYWH-65W.ttf")
+FONT_LIGHT_CONE_EFFECT_TINY = _font(11, False, "HYWH-65W.ttf")
+FONT_LIGHT_CONE_EFFECT_MINI = _font(10, False, "HYWH-65W.ttf")
 
 
 def _text(draw: ImageDraw.ImageDraw, xy: Tuple[int, int], text: Any, fill: Color, font: ImageFont.ImageFont) -> None:
@@ -924,6 +931,20 @@ def _char_face_path(name: str, game: str = "gs") -> Path | None:
     return None
 
 
+def _draw_damage_avatar_badge(img: Image.Image, draw: ImageDraw.ImageDraw, name: str, game: str, x: int, y: int, size: int, fallback: str, accent: Color) -> None:
+    face = _avatar_circle(_char_face_path(name, game), size)
+    border = (255, 238, 201) if game == "sr" else (214, 232, 255)
+    shadow_box = (x - 4, y - 4, x + size + 4, y + size + 4)
+    draw.ellipse(shadow_box, fill=(0, 0, 0, 82))
+    draw.ellipse((x - 2, y - 2, x + size + 2, y + size + 2), fill=accent, outline=border, width=2)
+    if face:
+        img.alpha_composite(face, (x, y))
+        draw.ellipse((x, y, x + size, y + size), outline=border, width=2)
+        return
+    draw.rounded_rectangle((x + 7, y + 7, x + size - 7, y + size - 7), radius=12, fill=(34, 50, 72))
+    _center_text(draw, (x + 7, y + 7, x + size - 7, y + size - 7), fallback, (255, 247, 222), _font(20, True, "NZBZ.ttf"))
+
+
 def _char_star(char: Dict[str, Any]) -> int:
     for key in ("rarity", "star", "rank"):
         try:
@@ -1025,8 +1046,14 @@ def _fmt_weapon_attr(key: str, value: Any) -> str:
 
 def _weapon_attr_items(weapon: Dict[str, Any]) -> List[Tuple[str, str]]:
     _, data = _weapon_meta(weapon)
-    attrs = weapon.get("attrs") if isinstance(weapon.get("attrs"), dict) else None
-    raw_attrs = attrs or data.get("attrs") or data.get("main") or {}
+    raw_attrs: Any = {}
+    for key in ("attrs", "attributes", "properties", "stats", "main", "main_attr", "mainAttr"):
+        candidate = weapon.get(key)
+        if isinstance(candidate, (dict, list)) and candidate:
+            raw_attrs = candidate
+            break
+    if not raw_attrs:
+        raw_attrs = data.get("attrs") or data.get("main") or {}
     items: List[Tuple[str, str]] = []
     if isinstance(raw_attrs, dict):
         for key, value in raw_attrs.items():
@@ -1060,6 +1087,83 @@ def _weapon_attr_items(weapon: Dict[str, Any]) -> List[Tuple[str, str]]:
     if not items and weapon.get("item_id"):
         return [("武器ID", str(weapon.get("item_id")))]
     return items[:4]
+
+
+def _weapon_main_attr_items(weapon: Dict[str, Any]) -> List[Tuple[str, str]]:
+    items = _weapon_attr_items(weapon)
+    main_items: List[Tuple[str, str]] = []
+    for label, value in items:
+        label_text = str(label)
+        if any(key in label_text for key in ("攻击", "生命", "防御")):
+            main_items.append((label_text, value))
+    for label, value in items:
+        if (label, value) not in main_items:
+            main_items.append((label, value))
+    return main_items[:3]
+
+
+def _weapon_refine_value(weapon: Dict[str, Any]) -> int:
+    for key in ("refine", "affix", "rank", "affix_level", "superimposition"):
+        value = weapon.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            refine = int(float(str(value)))
+        except (TypeError, ValueError):
+            continue
+        return max(1, min(refine, 5))
+    return 1
+
+
+def _clean_effect_text(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("desc", "description", "text", "effect", "skill_desc", "skillDesc"):
+            text = _clean_effect_text(value.get(key))
+            if text:
+                return text
+        return ""
+    if isinstance(value, list):
+        return "；".join(filter(None, (_clean_effect_text(item) for item in value)))
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text.replace("<br>", "；").replace("<br/>", "；").replace("<br />", "；")
+    for old, new in (("\r", ""), ("\n", "；"), ("<color=", ""), ("</color>", ""), ("#", "")):
+        text = text.replace(old, new)
+    while ";;" in text or "；；" in text:
+        text = text.replace(";;", ";").replace("；；", "；")
+    return text.strip("；; ")
+
+
+def _weapon_effect_text(weapon: Dict[str, Any], name: str, refine: int) -> str:
+    detail_text = get_light_cone_effect(name, refine)
+    if detail_text:
+        return detail_text
+    for key in ("desc", "description", "effect", "effect_desc", "skill", "skill_desc", "passive", "weapon_effect"):
+        text = _clean_effect_text(weapon.get(key))
+        if text:
+            return text
+    _, data = _weapon_meta(weapon)
+    for key in ("desc", "description", "effect", "skill", "skill_desc"):
+        text = _clean_effect_text(data.get(key))
+        if text:
+            return text
+    return ""
+
+
+def _draw_lines(
+    draw: ImageDraw.ImageDraw,
+    xy: Tuple[int, int],
+    lines: List[str],
+    fill: Color,
+    font: ImageFont.ImageFont,
+    line_h: int,
+    line_gap: int = 2,
+) -> None:
+    x, y = xy
+    for line in lines:
+        _text(draw, (x, y), line, fill, font)
+        y += line_h + line_gap
 
 
 def _artifact_set_name(rel: Dict[str, Any]) -> str:
@@ -1149,6 +1253,20 @@ def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont)
         return len(str(text)) * 12
 
 
+def _text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> Tuple[int, int]:
+    try:
+        box = draw.textbbox((0, 0), str(text), font=font)
+        return box[2] - box[0], box[3] - box[1]
+    except Exception:
+        return len(str(text)) * 12, 18
+
+
+def _center_text(draw: ImageDraw.ImageDraw, rect: Tuple[int, int, int, int], text: Any, fill: Color, font: ImageFont.ImageFont) -> None:
+    left, top, right, bottom = rect
+    text_w, text_h = _text_size(draw, str(text), font)
+    _text(draw, (left + (right - left - text_w) // 2, top + (bottom - top - text_h) // 2), text, fill, font)
+
+
 def _fit_font_text(draw: ImageDraw.ImageDraw, text: str, max_width: int, fonts: List[ImageFont.ImageFont], min_chars: int = 4) -> Tuple[str, ImageFont.ImageFont]:
     text = str(text or "")
     for font in fonts:
@@ -1167,7 +1285,15 @@ def _wrap_text_by_width(draw: ImageDraw.ImageDraw, text: str, max_width: int, fo
         return []
     lines: List[str] = []
     current = ""
-    for ch in text:
+    normalized = text.replace("。", "。\n").replace("；", "；\n")
+    for ch in normalized:
+        if ch == "\n":
+            if current:
+                lines.append(current)
+                current = ""
+            if len(lines) >= max_lines:
+                break
+            continue
         test = current + ch
         if current and _text_width(draw, test, font) > max_width:
             lines.append(current)
@@ -1185,6 +1311,59 @@ def _wrap_text_by_width(draw: ImageDraw.ImageDraw, text: str, max_width: int, fo
             lines[-1] = lines[-1][:-1]
         lines[-1] += "…"
     return lines
+
+
+def _wrap_text_full(draw: ImageDraw.ImageDraw, text: str, max_width: int, font: ImageFont.ImageFont) -> List[str]:
+    text = str(text or "").strip()
+    if not text:
+        return []
+    lines: List[str] = []
+    current = ""
+    normalized = text.replace("。", "。\n").replace("；", "；\n").replace(";", ";\n")
+    for ch in normalized:
+        if ch == "\n":
+            if current:
+                lines.append(current)
+                current = ""
+            continue
+        test = current + ch
+        if current and _text_width(draw, test, font) > max_width:
+            lines.append(current)
+            current = ch
+        else:
+            current = test
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def _fit_multiline_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    max_width: int,
+    max_height: int,
+    fonts: List[ImageFont.ImageFont],
+    line_gap: int = 2,
+) -> Tuple[List[str], ImageFont.ImageFont, int]:
+    text = str(text or "").strip()
+    if not text:
+        return [], fonts[-1], 0
+    for font in fonts:
+        _, line_h = _text_size(draw, "国", font)
+        line_h = max(line_h, 10)
+        max_lines = max(1, (max_height + line_gap) // (line_h + line_gap))
+        lines = _wrap_text_by_width(draw, text, max_width, font, max_lines=max_lines)
+        joined = "".join(line.rstrip("…") for line in lines)
+        normalized = text.replace("。", "").replace("；", "")
+        if lines and (len(lines) * line_h + (len(lines) - 1) * line_gap) <= max_height and joined.replace("。", "").replace("；", "") == normalized:
+            return lines, font, line_h
+        if len(lines) < max_lines and (len(lines) * line_h + (len(lines) - 1) * line_gap) <= max_height:
+            return lines, font, line_h
+    font = fonts[-1]
+    _, line_h = _text_size(draw, "国", font)
+    line_h = max(line_h, 10)
+    max_lines = max(1, (max_height + line_gap) // (line_h + line_gap))
+    return _wrap_text_by_width(draw, text, max_width, font, max_lines=max_lines), font, line_h
 
 
 def _display_name(value: Any, fallback: str) -> str:
@@ -1468,15 +1647,51 @@ def _draw_weapon(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: Dict
         weapon.setdefault("game", "sr")
     rarity = int(weapon.get("rarity") or 5)
     y = _draw_section_title(draw, y, "光锥" if is_sr else "武器", center=True)
-    _rounded_r(draw, (25, y, 575, y + 144), 12, (38, 37, 42), (92, 81, 62), 1)
     name = _weapon_name(weapon)
+    refine = _weapon_refine_value(weapon)
+    if is_sr:
+        card_h = 220
+        _rounded_r(draw, (25, y, 575, y + card_h), 12, (38, 37, 42), (92, 81, 62), 1)
+        draw.rounded_rectangle((42, y + 20, 120, y + 98), radius=12, fill=_star_color(rarity))
+        icon = _open_image(_weapon_icon(weapon), (74, 74), contain=True)
+        if icon:
+            _paste(img, icon, (44, y + 22))
+        else:
+            _text(draw, (68, y + 42), "锥", (255, 247, 230), FONT_CARD_TITLE)
+        title, title_font = _fit_font_text(draw, name, 172, [FONT_CARD_TITLE, FONT_TEXT, FONT_SMALL], min_chars=5)
+        _text(draw, (134, y + 18), title, (245, 228, 183), title_font)
+        _text(draw, (136, y + 54), f"叠影{refine}阶  Lv.{_safe(weapon.get('level'), '?')}  {'★' * min(rarity, 5)}", (226, 226, 226), FONT_SMALL)
+        attrs = _weapon_main_attr_items(weapon)
+        for idx, (label, value) in enumerate(attrs):
+            row = idx
+            ay = y + 84 + row * 24
+            attr_box = (136, ay, 304, ay + 20)
+            draw.rounded_rectangle(attr_box, radius=7, fill=(32, 32, 37), outline=(70, 64, 54), width=1)
+            label_fit, label_font = _fit_font_text(draw, str(label), 62, [FONT_TINY, FONT_LIGHT_CONE_EFFECT_SMALL], min_chars=2)
+            value_fit, value_font = _fit_font_text(draw, f"+{value}", 82, [FONT_TINY, FONT_LIGHT_CONE_EFFECT_SMALL], min_chars=2)
+            _text(draw, (attr_box[0] + 8, attr_box[1] + 3), label_fit, (178, 184, 196), label_font)
+            _text(draw, (attr_box[2] - 8 - _text_width(draw, value_fit, value_font), attr_box[1] + 3), value_fit, (255, 232, 170), value_font)
+        effect_box = (322, y + 18, 558, y + 202)
+        draw.rounded_rectangle(effect_box, radius=10, fill=(31, 31, 36), outline=(82, 73, 58), width=1)
+        _text(draw, (effect_box[0] + 12, effect_box[1] + 9), "光锥效果", (255, 205, 116), FONT_SMALL)
+        effect = _weapon_effect_text(weapon, name, refine) or "效果数据待补充"
+        lines, font, line_h = _fit_multiline_text(
+            draw,
+            effect,
+            effect_box[2] - effect_box[0] - 24,
+            effect_box[3] - effect_box[1] - 42,
+            [FONT_LIGHT_CONE_EFFECT, FONT_LIGHT_CONE_EFFECT_SMALL, FONT_LIGHT_CONE_EFFECT_TINY, FONT_LIGHT_CONE_EFFECT_MINI],
+            line_gap=1,
+        )
+        _draw_lines(draw, (effect_box[0] + 12, effect_box[1] + 35), lines, (222, 224, 230), font, line_h, line_gap=1)
+        return y + card_h + 16
+    _rounded_r(draw, (25, y, 575, y + 144), 12, (38, 37, 42), (92, 81, 62), 1)
     draw.rounded_rectangle((42, y + 18, 118, y + 94), radius=12, fill=_star_color(rarity))
     icon = _open_image(_weapon_icon(weapon), (72, 72), contain=True)
     if icon:
         _paste(img, icon, (44, y + 20))
     else:
-        _text(draw, (66, y + 40), "锥" if is_sr else "武", (255, 247, 230), FONT_CARD_TITLE)
-    refine = weapon.get("refine") or 1
+        _text(draw, (66, y + 40), "武", (255, 247, 230), FONT_CARD_TITLE)
     _text(draw, (134, y + 18), _fit_text(name, 13), (245, 228, 183), FONT_CARD_TITLE)
     _text(draw, (136, y + 58), f"精{_safe(refine, '1')}  Lv.{_safe(weapon.get('level'), '?')}  {'★' * min(rarity, 5)}", (226, 226, 226), FONT_SMALL)
     attrs = _weapon_attr_items(weapon)
@@ -1510,12 +1725,15 @@ def _draw_artifacts(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, char: D
     _rounded_r(draw, (25, y, 575, y + 96), 12, (42, 39, 42), (92, 81, 62), 1)
     _text(draw, (45, y + 15), "遗器总分" if is_sr else "圣遗物总分", (210, 210, 210), FONT_SMALL)
     _text(draw, (170, y + 9), f"{total}", (255, 232, 170), FONT_CARD_TITLE)
-    _text(draw, (278, y + 15), "评级", (210, 210, 210), FONT_SMALL)
-    _text(draw, (330, y + 9), artifact_rank(rank_score), (144, 232, 74), FONT_CARD_TITLE)
+    rank_box = (488, y + 12, 555, y + 78)
+    _rounded_r(draw, rank_box, 12, (78, 55, 30), (232, 181, 90), 1)
+    _center_text(draw, (rank_box[0], rank_box[1] + 7, rank_box[2], rank_box[1] + 28), "评级", (255, 235, 184), FONT_TINY)
+    _center_text(draw, (rank_box[0], rank_box[1] + 25, rank_box[2], rank_box[3] - 5), artifact_rank(rank_score), (255, 183, 64), FONT_ARTIFACT_RANK)
     _text(draw, (45, y + 48), f"评分规则：{_fit_text(title, 40)}", (170, 164, 145), FONT_TINY)
     useful = [k for k, v in weight.items() if v > 0]
     names = {"atk": "攻击", "hp": "生命", "def": "防御", "speed": "速度", "cpct": "暴率", "cdmg": "爆伤", "dmg": "增伤", "stance": "击破", "effPct": "命中", "effDef": "抵抗", "recharge": "充能", "heal": "治疗"}
-    _text(draw, (45, y + 70), "有效词条：" + " / ".join(names.get(k, k) for k in useful[:8]), (188, 196, 210), FONT_TINY)
+    useful_text, useful_font = _fit_font_text(draw, "有效词条：" + " / ".join(names.get(k, k) for k in useful[:8]), 420, [FONT_TINY, FONT_LIGHT_CONE_EFFECT_SMALL], 6)
+    _text(draw, (45, y + 70), useful_text, (188, 196, 210), useful_font)
     y += 114
     card_w, card_h = 176, 238
     relic_name_font = _font(13, False, "HYWH-65W.ttf")
@@ -1617,9 +1835,10 @@ def _draw_artifact_detail(img: Image.Image, draw: ImageDraw.ImageDraw, y: int, c
                     _text(draw, (score_right - _text_width(draw, score_text_fit, score_font), py), score_text_fit, (255, 167, 72), score_font)
         else:
             _text(draw, (x + 96, y + 72), "无副词条", (188, 196, 210), FONT_TINY)
-        _rounded_r(draw, (x + 462, y + 22, x + 532, y + 62), 10, (80, 62, 36), (221, 191, 135), 1)
-        _text(draw, (x + 472, y + 30), f"{score:.1f}", (255, 232, 170), FONT_TEXT)
-        _text(draw, (x + 468, y + 70), artifact_rank(score), (144, 232, 74), FONT_TINY)
+        score_box = (x + 460, y + 19, x + 535, y + 91)
+        _rounded_r(draw, score_box, 12, (78, 55, 30), (232, 181, 90), 1)
+        _center_text(draw, (score_box[0], score_box[1] + 8, score_box[2], score_box[1] + 34), f"{score:.1f}", (255, 235, 184), FONT_TEXT)
+        _center_text(draw, (score_box[0], score_box[1] + 34, score_box[2], score_box[3] - 5), artifact_rank(score), (255, 183, 64), FONT_ARTIFACT_RANK)
         y += h + 12
     return y
 
@@ -1761,6 +1980,516 @@ async def render_artifact_list_image(result: PanelResult) -> bytes:
         _text(draw, (650, y + 12), f"{total:.1f} [{artifact_rank(rank_score)}]", (144, 232, 74), FONT_TEXT)
         _text(draw, (120, y + 38), _fit_text(title, 28), (160, 171, 190), FONT_TINY)
     _text(draw, (54, height - 42), "评分权重使用 MiHoYoUID 内置适配规则", (145, 158, 186), FONT_TINY)
+    return await convert_img(img)
+
+
+def _rank_metric_value(row: Dict[str, Any], mode: str) -> float:
+    key = {
+        "mark": "artifact_score",
+        "valid": "valid_score",
+        "crit": "crit_score",
+        "dmg": "damage_expect",
+    }.get(mode, "damage_expect")
+    try:
+        return float(row.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _rank_metric_title(mode: str, is_sr: bool) -> str:
+    return {
+        "mark": "遗器评分" if is_sr else "圣遗物评分",
+        "valid": "加权有效词条",
+        "crit": "双爆副词条",
+        "dmg": "伤害期望",
+    }.get(mode, "伤害期望")
+
+
+async def render_rank_list_image(rows: List[Dict[str, Any]], group_id: str, game: str = "gs", char_name: str = "", mode: str = "dmg") -> bytes:
+    is_sr = game == "sr"
+    rows = list(rows or [])[:20]
+    width = 940 if is_sr else 860
+    row_h = 104
+    height = max(580, 210 + max(1, len(rows)) * row_h + 90)
+    img = Image.new("RGBA", (width, height), (10, 18, 32, 255))
+    bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
+    if bg:
+        img.alpha_composite(bg)
+    img.alpha_composite(Image.new("RGBA", (width, height), (4, 13, 30, 92)))
+    draw = ImageDraw.Draw(img)
+
+    rank_title_fonts = [FONT_PROFILE_TITLE, _font(38, True, "NZBZ.ttf"), _font(34, True, "HYWH-65W.ttf")]
+    rank_tag_font = _font(19, True, "HYWH-65W.ttf")
+    rank_no_font = _font(28, True, "NZBZ.ttf")
+    rank_name_fonts = [_font(22, True, "HYWH-65W.ttf"), _font(20, True, "HYWH-65W.ttf"), FONT_PROFILE_NAME]
+    rank_info_fonts = [_font(14, False, "HYWH-65W.ttf"), _font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf")]
+    rank_metric_fonts = [_font(34, True, "NZBZ.ttf"), _font(30, True, "NZBZ.ttf"), _font(26, True, "NZBZ.ttf")]
+    rank_metric_label_fonts = [_font(14, True, "HYWH-65W.ttf"), _font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf")]
+    rank_footer_fonts = [_font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf"), _font(11, False, "HYWH-65W.ttf")]
+
+    accent = (246, 199, 74) if mode == "mark" else (84, 150, 255) if mode == "dmg" else (147, 219, 112)
+    title_name = char_name or ("最高分" if mode == "mark" else "最强")
+    title = f"{'*' if is_sr else '#'}{title_name}{_rank_metric_title(mode, is_sr) if char_name and mode != 'dmg' else ''}排行"
+    header_right = width - 44
+    tag_box = (header_right - 150, 40, header_right, 88)
+    title_limit = tag_box[0] - 72
+    title_text, title_font = _fit_font_text(draw, title, title_limit, rank_title_fonts, 6)
+    _shadow_text(draw, (48, 34), title_text, (255, 255, 255), title_font)
+    desc_text = f"群 {group_id} · {_rank_metric_title(mode, is_sr)} · 本群面板缓存"
+    desc_text, desc_font = _fit_font_text(draw, desc_text, width - 104, [FONT_PROFILE_LABEL, _font(16, True, "HYWH-65W.ttf"), FONT_TINY], 8)
+    _shadow_text(draw, (52, 98), desc_text, (220, 228, 244), desc_font)
+    note_text = f"更新时间：{datetime.now().strftime('%m-%d %H:%M')} · 参考 miao-plugin 排行列表"
+    note_text, note_font = _fit_font_text(draw, note_text, width - 104, rank_info_fonts, 8)
+    _text(draw, (54, 140), note_text, (170, 178, 193), note_font)
+    draw.rounded_rectangle(tag_box, radius=18, fill=(*accent, 210), outline=(255, 245, 210, 130), width=1)
+    _center_text(draw, tag_box, "群排名", (26, 28, 34), rank_tag_font)
+
+    y = 190
+    if not rows:
+        _draw_profile_list_card(draw, (48, y, width - 48, y + 130), (18, 33, 50), (84, 102, 136))
+        _text(draw, (82, y + 42), "暂无排名：请先在本群使用面板/更新面板命令。", (248, 244, 232), FONT_TEXT)
+    for idx, row in enumerate(rows, start=1):
+        yy = y + (idx - 1) * row_h
+        fill = (24, 39, 58) if idx % 2 else (18, 33, 50)
+        outline = (246, 199, 74) if idx <= 3 else (84, 102, 136)
+        card_box = (42, yy, width - 42, yy + 86)
+        _draw_profile_list_card(draw, card_box, fill, outline)
+        rank_color = (255, 209, 90) if idx == 1 else (210, 220, 238) if idx == 2 else (213, 154, 102) if idx == 3 else (148, 160, 185)
+        draw.rounded_rectangle((62, yy + 18, 112, yy + 68), radius=16, fill=rank_color)
+        rank_text = str(idx)
+        _center_text(draw, (62, yy + 18, 112, yy + 68), rank_text, (35, 31, 26), rank_no_font)
+        name = str(row.get("char_name") or char_name or "角色")
+        face = _avatar_circle(_char_face_path(name, game), 62)
+        draw.ellipse((132, yy + 12, 194, yy + 74), fill=_star_color(5), outline=(255, 255, 255), width=2)
+        if face:
+            img.alpha_composite(face, (132, yy + 12))
+        else:
+            _center_text(draw, (132, yy + 12, 194, yy + 74), name[:1], (255, 245, 225), FONT_TEXT)
+        metric = _rank_metric_value(row, mode)
+        uid = str(row.get("uid") or "-")
+        cons = row.get("constellation")
+        lv = row.get("level") or "?"
+        metric_left = width - 236
+        name_text, name_font = _fit_font_text(draw, name, metric_left - 222, rank_name_fonts, 4)
+        _text(draw, (214, yy + 15), name_text, (248, 244, 232), name_font)
+        info_line = f"UID {uid} · Lv.{lv} · {'星魂' if is_sr else '命座'} {cons if cons is not None else '-'}"
+        info_line, info_font = _fit_font_text(draw, info_line, metric_left - 222, rank_info_fonts, 8)
+        _text(draw, (214, yy + 45), info_line, (180, 191, 211), info_font)
+        sub_metric = f"遗器 {float(row.get('artifact_score') or 0):.1f}" if is_sr else f"圣遗物 {float(row.get('artifact_score') or 0):.1f}"
+        sub_line = f"{sub_metric} · {row.get('artifact_rank') or '-'}"
+        sub_line, sub_font = _fit_font_text(draw, sub_line, 170, rank_info_fonts, 6)
+        _text(draw, (metric_left - 178, yy + 45), sub_line, (170, 178, 193), sub_font)
+        metric_text = f"{metric:.1f}" if mode != "dmg" else f"{metric:,.0f}"
+        metric_text, metric_font = _fit_font_text(draw, metric_text, 150, rank_metric_fonts, 3)
+        metric_w = _text_width(draw, metric_text, metric_font)
+        _text(draw, (width - 76 - metric_w, yy + 16), metric_text, accent, metric_font)
+        mt = _rank_metric_title(mode, is_sr)
+        mt_text, mt_font = _fit_font_text(draw, mt, 150, rank_metric_label_fonts, 4)
+        mt_w = _text_width(draw, mt_text, mt_font)
+        _text(draw, (width - 76 - mt_w, yy + 54), mt_text, (204, 214, 232), mt_font)
+    footer = "Created By Miao-Plugin & MiHoYoUID · 群排名会在成员查看面板后自动刷新"
+    footer, footer_font = _fit_font_text(draw, footer, width - 96, rank_footer_fonts, 10)
+    _text(draw, (48, height - 46), footer, (150, 163, 190), footer_font)
+    return await convert_img(img)
+
+
+async def render_training_stat_image(result: PanelResult) -> bytes:
+    from .artifact_service import artifact_rank, character_artifact_score
+
+    def _training_score(char: Dict[str, Any]) -> float:
+        total, _, _ = character_artifact_score(char)
+        level = float(char.get("level") or 1)
+        skills = [float(x or 0) for x in char.get("skill_levels") or []]
+        skill_score = sum(skills[:5]) / max(len(skills[:5]) or 1, 1) * 4
+        artifact_score = min(float(total or 0) / (6 if char.get("game") == "sr" else 5), 66)
+        cons = float(char.get("constellation") or 0)
+        return round(min(level, 90) / 90 * 25 + skill_score + artifact_score + cons * 1.5, 1)
+
+    is_sr = result.game == "sr"
+    chars = [dict(c, game=result.game) for c in result.characters or [] if isinstance(c, dict)]
+    rows = sorted(((_training_score(c), c) for c in chars), key=lambda x: x[0], reverse=True)[:20]
+    width = 940 if is_sr else 860
+    row_h = 104
+    height = max(580, 210 + max(1, len(rows)) * row_h + 90)
+    img = Image.new("RGBA", (width, height), (10, 18, 32, 255))
+    bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
+    if bg:
+        img.alpha_composite(bg)
+    img.alpha_composite(Image.new("RGBA", (width, height), (4, 13, 30, 92)))
+    draw = ImageDraw.Draw(img)
+
+    title_fonts = [FONT_PROFILE_TITLE, _font(38, True, "NZBZ.ttf"), _font(34, True, "HYWH-65W.ttf")]
+    tag_font = _font(19, True, "HYWH-65W.ttf")
+    no_font = _font(28, True, "NZBZ.ttf")
+    name_fonts = [_font(22, True, "HYWH-65W.ttf"), _font(20, True, "HYWH-65W.ttf"), FONT_PROFILE_NAME]
+    info_fonts = [_font(14, False, "HYWH-65W.ttf"), _font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf")]
+    score_fonts = [_font(34, True, "NZBZ.ttf"), _font(30, True, "NZBZ.ttf"), _font(26, True, "NZBZ.ttf")]
+    label_fonts = [_font(14, True, "HYWH-65W.ttf"), _font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf")]
+    footer_fonts = [_font(13, False, "HYWH-65W.ttf"), _font(12, False, "HYWH-65W.ttf"), _font(11, False, "HYWH-65W.ttf")]
+    accent = (246, 199, 74) if is_sr else (84, 150, 255)
+
+    avg = sum(score for score, _ in rows) / len(rows) if rows else 0
+    title = "*崩铁练度统计" if is_sr else "#原神练度统计"
+    header_right = width - 44
+    tag_box = (header_right - 150, 40, header_right, 88)
+    title_text, title_font = _fit_font_text(draw, title, tag_box[0] - 72, title_fonts, 6)
+    _shadow_text(draw, (48, 34), title_text, (255, 255, 255), title_font)
+    desc = f"UID {result.uid} · 角色数 {len(chars)} · 平均练度 {avg:.1f} · 数据源 {result.source}"
+    desc, desc_font = _fit_font_text(draw, desc, width - 104, [FONT_PROFILE_LABEL, _font(16, True, "HYWH-65W.ttf"), FONT_TINY], 8)
+    _shadow_text(draw, (52, 98), desc, (220, 228, 244), desc_font)
+    note = f"更新时间：{datetime.now().strftime('%m-%d %H:%M')} · 练度包含等级、{'行迹' if is_sr else '天赋'}、{'遗器' if is_sr else '圣遗物'}与{'星魂' if is_sr else '命座'}"
+    note, note_font = _fit_font_text(draw, note, width - 104, info_fonts, 8)
+    _text(draw, (54, 140), note, (170, 178, 193), note_font)
+    draw.rounded_rectangle(tag_box, radius=18, fill=(*accent, 210), outline=(255, 245, 210, 130), width=1)
+    _center_text(draw, tag_box, "练度统计", (26, 28, 34), tag_font)
+
+    y = 190
+    if not rows:
+        _draw_profile_list_card(draw, (48, y, width - 48, y + 130), (18, 33, 50), (84, 102, 136))
+        _text(draw, (82, y + 42), "当前数据源没有返回可统计的角色详情。", (248, 244, 232), FONT_TEXT)
+    for idx, (score, char) in enumerate(rows, start=1):
+        yy = y + (idx - 1) * row_h
+        fill = (24, 39, 58) if idx % 2 else (18, 33, 50)
+        outline = (246, 199, 74) if idx <= 3 else (84, 102, 136)
+        _draw_profile_list_card(draw, (42, yy, width - 42, yy + 86), fill, outline)
+        rank_color = (255, 209, 90) if idx == 1 else (210, 220, 238) if idx == 2 else (213, 154, 102) if idx == 3 else (148, 160, 185)
+        draw.rounded_rectangle((62, yy + 18, 112, yy + 68), radius=16, fill=rank_color)
+        _center_text(draw, (62, yy + 18, 112, yy + 68), str(idx), (35, 31, 26), no_font)
+        name = _char_name(char)
+        face = _avatar_circle(_char_face_path(name, result.game), 62)
+        draw.ellipse((132, yy + 12, 194, yy + 74), fill=_star_color(5), outline=(255, 255, 255), width=2)
+        if face:
+            img.alpha_composite(face, (132, yy + 12))
+        else:
+            _center_text(draw, (132, yy + 12, 194, yy + 74), name[:1], (255, 245, 225), FONT_TEXT)
+        total, _, rule = character_artifact_score(char)
+        rank_score = total / 6 if is_sr and total > 0 else total
+        skills = "/".join(str(x) for x in char.get("skill_levels") or []) or "-"
+        cons = char.get("constellation")
+        lv = char.get("level") or "?"
+        metric_left = width - 236
+        name_text, name_font = _fit_font_text(draw, name, metric_left - 222, name_fonts, 4)
+        _text(draw, (214, yy + 15), name_text, (248, 244, 232), name_font)
+        info = f"Lv.{lv} · {'星魂' if is_sr else '命座'} {cons if cons is not None else 0} · {'行迹' if is_sr else '天赋'} {skills}"
+        info, info_font = _fit_font_text(draw, info, metric_left - 222, info_fonts, 8)
+        _text(draw, (214, yy + 45), info, (180, 191, 211), info_font)
+        sub = f"{'遗器' if is_sr else '圣遗物'} {total:.1f} · {artifact_rank(rank_score)} · {rule}"
+        sub, sub_font = _fit_font_text(draw, sub, 178, info_fonts, 6)
+        _text(draw, (metric_left - 186, yy + 45), sub, (170, 178, 193), sub_font)
+        score_text, score_font = _fit_font_text(draw, f"{score:.1f}", 150, score_fonts, 3)
+        score_w = _text_width(draw, score_text, score_font)
+        _text(draw, (width - 76 - score_w, yy + 16), score_text, accent, score_font)
+        label = "练度"
+        label_text, label_font = _fit_font_text(draw, label, 150, label_fonts, 4)
+        label_w = _text_width(draw, label_text, label_font)
+        _text(draw, (width - 76 - label_w, yy + 54), label_text, (204, 214, 232), label_font)
+    footer = "Created By Miao-Plugin & MiHoYoUID · 练度统计分数用于快速参考"
+    footer, footer_font = _fit_font_text(draw, footer, width - 96, footer_fonts, 10)
+    _text(draw, (48, height - 46), footer, (150, 163, 190), footer_font)
+    return await convert_img(img)
+
+
+def _wiki_clean_text(text: Any) -> str:
+    import re
+    from html import unescape
+
+    text = unescape(str(text or ""))
+    text = re.sub(r"<h3>(.*?)</h3>", r"【\1】", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\$\d+\[[^\]]+\]", "倍率", text)
+    return text.replace("\n", " ").strip()
+
+
+def _wiki_material_lines(materials: Any) -> List[str]:
+    if not isinstance(materials, dict):
+        return []
+    labels = {
+        "gem": "突破宝石",
+        "boss": "首领材料",
+        "specialty": "区域特产",
+        "normal": "常规材料",
+        "talent": "天赋书",
+        "weekly": "周本材料",
+        "weapon": "命途材料",
+    }
+    return [f"{labels.get(k, k)}：{v}" for k, v in materials.items() if v]
+
+
+def _wiki_talent_lines(data: Dict[str, Any], limit: int = 4) -> List[str]:
+    talents = data.get("talent") or {}
+    if not isinstance(talents, dict):
+        return []
+    lines: List[str] = []
+    seen = set()
+    for key in ("a", "e", "q", "t", "z", "q2"):
+        talent = talents.get(key)
+        if not isinstance(talent, dict):
+            continue
+        name = str(talent.get("name") or talent.get("type") or "技能")
+        if name in seen:
+            continue
+        seen.add(name)
+        desc = talent.get("desc")
+        desc_text = " ".join(_wiki_clean_text(x) for x in desc[:3]) if isinstance(desc, list) else _wiki_clean_text(desc)
+        lines.append(f"{name}：{desc_text}")
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _wiki_cons_items(data: Dict[str, Any]) -> List[Tuple[str, str]]:
+    cons = data.get("cons") or data.get("constellation") or data.get("rank") or {}
+    if isinstance(cons, list):
+        items = cons[:6]
+    elif isinstance(cons, dict):
+        items = [cons.get(str(i)) or cons.get(i) for i in range(1, 7)]
+    else:
+        items = []
+    ret: List[Tuple[str, str]] = []
+    for idx, item in enumerate(items, start=1):
+        if isinstance(item, dict):
+            name = str(item.get("name") or f"第{idx}层")
+            desc = item.get("desc") or item.get("effect")
+            desc_text = " ".join(_wiki_clean_text(x) for x in desc) if isinstance(desc, list) else _wiki_clean_text(desc)
+        else:
+            name, desc_text = f"第{idx}层", _wiki_clean_text(item)
+        ret.append((f"{idx}. {name}", desc_text))
+    return ret
+
+
+def _chunk_wiki_sections(
+    draw: ImageDraw.ImageDraw,
+    sections: List[Tuple[str, List[Tuple[str, str] | str]]],
+    width: int,
+    line_font: ImageFont.ImageFont,
+) -> List[List[Tuple[str, List[Tuple[str, List[str]]]]]]:
+    pages: List[List[Tuple[str, List[Tuple[str, List[str]]]]]] = []
+    current: List[Tuple[str, List[Tuple[str, List[str]]]]] = []
+    current_h = 210
+    limit_h = WIKI_PAGE_MAX_HEIGHT - 120
+
+    def row_height(head: str, lines: List[str]) -> int:
+        return 34 + max(1, len(lines)) * 28 + 18 if head else max(1, len(lines)) * 28 + 18
+
+    for sec_title, items in sections:
+        sec_rows: List[Tuple[str, List[str]]] = []
+        sec_h = 52 + 18
+        for item in items:
+            if isinstance(item, tuple):
+                head, desc = item
+                lines = _wrap_text_full(draw, desc, width - 150, line_font)
+                sec_rows.append((head, lines))
+                sec_h += row_height(head, lines) + 10
+            else:
+                lines = _wrap_text_full(draw, str(item), width - 130, line_font)
+                sec_rows.append(("", lines))
+                sec_h += row_height("", lines) + 10
+
+        if current and current_h + sec_h > limit_h:
+            pages.append(current)
+            current = []
+            current_h = 210
+
+        if sec_h <= limit_h - 210:
+            current.append((sec_title, sec_rows))
+            current_h += sec_h
+            continue
+
+        if current:
+            pages.append(current)
+            current = []
+            current_h = 210
+
+        part: List[Tuple[str, List[str]]] = []
+        part_h = 52 + 18
+        for head, lines in sec_rows:
+            rh = row_height(head, lines) + 10
+            if part and part_h + rh > limit_h - 210:
+                pages.append([(sec_title, part)])
+                part = []
+                part_h = 52 + 18
+            part.append((head, lines))
+            part_h += rh
+        if part:
+            current = [(sec_title, part)]
+            current_h = 210 + part_h
+
+    if current:
+        pages.append(current)
+    return pages or [[]]
+
+
+async def render_char_wiki_image(data: Dict[str, Any], mode: str = "资料", game: str = "gs") -> bytes:
+    pages = await render_char_wiki_images(data, mode, game)
+    return pages[0]
+
+
+async def render_char_wiki_images(data: Dict[str, Any], mode: str = "资料", game: str = "gs") -> List[bytes]:
+    is_sr = game == "sr"
+    title = str(data.get("name") or "未知角色")
+    subtitle = str(data.get("title") or data.get("allegiance") or "角色资料")
+    materials = _wiki_material_lines(data.get("materials"))
+    talents = _wiki_talent_lines(data, limit=4)
+    cons_items = _wiki_cons_items(data)
+    sections: List[Tuple[str, List[Tuple[str, str] | str]]] = []
+    if mode in {"命座", "命之座", "星魂", "cons"}:
+        sections.append(("命座详情" if not is_sr else "星魂详情", cons_items or ["暂无命座/星魂数据"]))
+    elif mode in {"天赋", "技能", "行迹", "talent"}:
+        sections.append(("技能/行迹", talents or ["暂无技能数据"]))
+        sections.append(("命座详情" if not is_sr else "星魂详情", cons_items or ["暂无命座/星魂数据"]))
+    else:
+        basic = [
+            f"星级：{data.get('star') or '-'} · 元素/属性：{data.get('elem') or '-'} · 武器/命途：{data.get('weapon') or '-'}",
+            f"阵营：{data.get('allegiance') or '-'} · 生日：{data.get('birth') or data.get('birthday') or '-'}",
+            f"中文CV：{data.get('cncv') or '-'} · 日文CV：{data.get('jpcv') or '-'}",
+            f"简介：{_wiki_clean_text(data.get('desc'))}",
+        ]
+        sections.append(("角色图鉴", basic))
+        sections.append(("养成材料", materials or ["暂无材料数据"]))
+        sections.append(("技能摘要", talents or ["暂无技能数据"]))
+        sections.append(("命座详情" if not is_sr else "星魂详情", cons_items or ["暂无命座/星魂数据"]))
+
+    width = 980
+    line_font = _font(18, False, "HYWH-65W.ttf")
+    title_font = _font(58, True, "NZBZ.ttf")
+    sec_font = _font(26, True, "HYWH-65W.ttf")
+    small_font = _font(13, False, "HYWH-65W.ttf")
+    tmp = Image.new("RGBA", (width, 100), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tmp)
+    page_sections = _chunk_wiki_sections(td, sections, width, line_font)
+    images: List[bytes] = []
+    total_pages = len(page_sections)
+    for page_idx, measured in enumerate(page_sections, start=1):
+        content_h = 210
+        for _, sec_rows in measured:
+            content_h += 52 + 18
+            for head, lines in sec_rows:
+                content_h += (34 + max(1, len(lines)) * 28 + 18 if head else max(1, len(lines)) * 28 + 18) + 10
+        height = min(WIKI_PAGE_MAX_HEIGHT, max(760, content_h + 76))
+        img = Image.new("RGBA", (width, height), (10, 18, 32, 255))
+        bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
+        if bg:
+            img.alpha_composite(bg)
+        img.alpha_composite(Image.new("RGBA", (width, height), (4, 13, 30, 105)))
+        draw = ImageDraw.Draw(img)
+        accent = (246, 199, 74) if is_sr else (84, 150, 255)
+        title_suffix = f" · {page_idx}/{total_pages}" if total_pages > 1 else ""
+        title_text, title_font_fit = _fit_font_text(draw, title + title_suffix, width - 310, [title_font, FONT_PROFILE_TITLE, _font(36, True, "HYWH-65W.ttf")], 4)
+        _shadow_text(draw, (54, 34), title_text, (255, 247, 222), title_font_fit)
+        sub = f"{subtitle} · {'星穹铁道' if is_sr else '原神'} · miao-plugin 图鉴资料"
+        sub, sub_font = _fit_font_text(draw, sub, width - 110, [FONT_PROFILE_LABEL, _font(16, True, "HYWH-65W.ttf"), FONT_TINY], 8)
+        _shadow_text(draw, (58, 100), sub, (220, 228, 244), sub_font)
+        tag_box = (width - 194, 42, width - 54, 88)
+        draw.rounded_rectangle(tag_box, radius=17, fill=(*accent, 210), outline=(255, 245, 210, 130), width=1)
+        _center_text(draw, tag_box, "角色图鉴", (26, 28, 34), _font(18, True, "HYWH-65W.ttf"))
+        y = 158
+        for sec_title, sec_rows in measured:
+            _rounded_r(draw, (46, y, width - 46, y + 42), 16, (30, 40, 61), (84, 102, 136), 1)
+            _text(draw, (66, y + 7), sec_title, (255, 232, 174), sec_font)
+            y += 58
+            for head, lines in sec_rows:
+                row_h = 34 + max(1, len(lines)) * 28 + 18 if head else max(1, len(lines)) * 28 + 18
+                _draw_profile_list_card(draw, (54, y, width - 54, y + row_h), (18, 33, 50), (62, 78, 106))
+                tx = 76
+                ty = y + 14
+                if head:
+                    head_text, head_font = _fit_font_text(draw, head, width - 150, [_font(19, True, "HYWH-65W.ttf"), _font(17, True, "HYWH-65W.ttf")], 4)
+                    _text(draw, (tx, ty), head_text, (248, 244, 232), head_font)
+                    ty += 34
+                for line in lines:
+                    _text(draw, (tx, ty), line, (190, 202, 224), line_font)
+                    ty += 28
+                y += row_h + 10
+            y += 12
+        footer = "Created By Miao-Plugin & MiHoYoUID · 已补全各命座/星魂详情"
+        if total_pages > 1:
+            footer = f"{footer} · 第 {page_idx}/{total_pages} 页"
+        footer, footer_font = _fit_font_text(draw, footer, width - 96, [small_font, _font(12, False, "HYWH-65W.ttf")], 10)
+        _text(draw, (48, height - 46), footer, (150, 163, 190), footer_font)
+        images.append(await convert_img(img))
+    return images
+
+
+async def render_damage_image(result: PanelResult, character_query: str = "") -> bytes:
+    from .damage_service import collect_damage_rows, render_damage_text
+
+    rows, error = collect_damage_rows(result, character_query)
+    is_sr = result.game == "sr"
+    width = 980
+    tmp = Image.new("RGBA", (width, 100), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tmp)
+    title = "#喵喵崩铁伤害估算" if is_sr else "#喵喵原神伤害估算"
+    accent = (246, 199, 74) if is_sr else (84, 150, 255)
+    line_font = _font(17, False, "HYWH-65W.ttf")
+    name_font = _font(24, True, "HYWH-65W.ttf")
+    small_font = _font(14, False, "HYWH-65W.ttf")
+    content_h = 210
+    measured: List[Dict[str, Any]] = []
+    if error:
+        lines = _wrap_text_full(td, error, width - 130, line_font)
+        measured.append({"error": lines})
+        content_h += 80 + len(lines) * 28
+    else:
+        for row in rows:
+            details = list(row.get("details") or [])
+            notes = list(row.get("notes") or [])
+            note_lines: List[str] = []
+            for note in notes:
+                note_lines.extend(_wrap_text_full(td, str(note), width - 150, small_font))
+            block_h = 74 + len(details) * 58 + max(1, len(note_lines)) * 22 + 24
+            measured.append({**row, "note_lines": note_lines, "block_h": block_h})
+            content_h += block_h + 18
+    height = max(620, content_h + 70)
+    img = Image.new("RGBA", (width, height), (10, 18, 32, 255))
+    bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
+    if bg:
+        img.alpha_composite(bg)
+    img.alpha_composite(Image.new("RGBA", (width, height), (4, 13, 30, 105)))
+    draw = ImageDraw.Draw(img)
+    title_text, title_font = _fit_font_text(draw, title, width - 260, [_font(46, True, "NZBZ.ttf"), FONT_PROFILE_TITLE, _font(34, True, "HYWH-65W.ttf")], 6)
+    _shadow_text(draw, (52, 36), title_text, (255, 247, 222), title_font)
+    desc = f"UID {result.uid} · 数据源 {result.source} · 角色数 {len(rows)} · {datetime.now().strftime('%m-%d %H:%M')}"
+    desc, desc_font = _fit_font_text(draw, desc, width - 104, [FONT_PROFILE_LABEL, _font(16, True, "HYWH-65W.ttf"), FONT_TINY], 8)
+    _shadow_text(draw, (56, 102), desc, (220, 228, 244), desc_font)
+    tag_box = (width - 194, 42, width - 54, 88)
+    draw.rounded_rectangle(tag_box, radius=17, fill=(*accent, 210), outline=(255, 245, 210, 130), width=1)
+    _center_text(draw, tag_box, "伤害估算", (26, 28, 34), _font(18, True, "HYWH-65W.ttf"))
+    y = 164
+    if error:
+        _draw_profile_list_card(draw, (54, y, width - 54, height - 86), (18, 33, 50), (62, 78, 106))
+        ty = y + 26
+        for line in measured[0].get("error", []):
+            _text(draw, (78, ty), line, (248, 244, 232), line_font)
+            ty += 28
+    for idx, row in enumerate([m for m in measured if "error" not in m], start=1):
+        block_h = int(row.get("block_h") or 160)
+        _draw_profile_list_card(draw, (46, y, width - 46, y + block_h), (18, 33, 50), (62, 78, 106))
+        name = str(row.get("name") or "未知角色")
+        _draw_damage_avatar_badge(img, draw, name, result.game, 64, y + 14, 56, str(idx), accent)
+        name_text, nf = _fit_font_text(draw, name, 260, [name_font, FONT_PROFILE_NAME], 4)
+        _text(draw, (132, y + 16), name_text, (248, 244, 232), nf)
+        meta = f"Lv.{row.get('level')} · {'星魂' if is_sr else '命座'} {row.get('constellation')} · 模板：{row.get('template')}"
+        meta, meta_font = _fit_font_text(draw, meta, width - 190, [small_font, FONT_TINY], 8)
+        _text(draw, (132, y + 48), meta, (178, 190, 212), meta_font)
+        yy = y + 86
+        for detail in row.get("details") or []:
+            title = str(detail.get("title") or "伤害")
+            dmg = int(float(detail.get("dmg") or 0))
+            avg = int(float(detail.get("avg") or 0))
+            _rounded_r(draw, (70, yy, width - 70, yy + 46), 12, (28, 42, 62), (72, 88, 120), 1)
+            title_text, tf = _fit_font_text(draw, title, 390, [_font(18, True, "HYWH-65W.ttf"), line_font], 4)
+            _text(draw, (94, yy + 12), title_text, (235, 239, 248), tf)
+            _text(draw, (width - 360, yy + 12), f"暴击 {dmg:,}", accent, _font(17, True, "HYWH-65W.ttf"))
+            _text(draw, (width - 190, yy + 12), f"期望 {avg:,}", (255, 232, 174), _font(17, True, "HYWH-65W.ttf"))
+            yy += 58
+        note_lines = row.get("note_lines") or ["基于当前公开面板与角色独立模板估算，实际轴伤会受队伍与敌人影响。"]
+        for line in note_lines:
+            _text(draw, (76, yy), "· " + line, (168, 180, 202), small_font)
+            yy += 22
+        y += block_h + 18
+    footer = "Created By Miao-Plugin & MiHoYoUID · 图片高度按内容自适应"
+    footer, footer_font = _fit_font_text(draw, footer, width - 96, [small_font, _font(12, False, "HYWH-65W.ttf")], 10)
+    _text(draw, (48, height - 46), footer, (150, 163, 190), footer_font)
     return await convert_img(img)
 
 

@@ -74,6 +74,56 @@ async def get_all_user_cfg() -> Dict[str, Any]:
         return _load_json()
 
 
+async def set_rank_record(group_id: str, game: str, char_name: str, uid: str, record: Dict[str, Any]) -> None:
+    async with _LOCK:
+        data = _load_json()
+        ranks = data.get("_group_ranks")
+        if not isinstance(ranks, dict):
+            ranks = {}
+        group_map = ranks.setdefault(str(group_id), {})
+        game_map = group_map.setdefault(str(game), {})
+        char_map = game_map.setdefault(str(char_name), {})
+        char_map[str(uid)] = record
+        data["_group_ranks"] = ranks
+        _save_json(data)
+
+
+async def get_all_rank_records(group_id: str, game: str) -> Dict[str, Any]:
+    async with _LOCK:
+        data = _load_json()
+        ranks = data.get("_group_ranks") or {}
+        if not isinstance(ranks, dict):
+            return {}
+        group_map = ranks.get(str(group_id)) or {}
+        if not isinstance(group_map, dict):
+            return {}
+        game_map = group_map.get(str(game)) or {}
+        return game_map if isinstance(game_map, dict) else {}
+
+
+async def reset_rank_records(group_id: str, game: str, char_name: str = "") -> int:
+    async with _LOCK:
+        data = _load_json()
+        ranks = data.get("_group_ranks") or {}
+        if not isinstance(ranks, dict):
+            return 0
+        group_map = ranks.get(str(group_id)) or {}
+        if not isinstance(group_map, dict):
+            return 0
+        game_map = group_map.get(str(game)) or {}
+        if not isinstance(game_map, dict):
+            return 0
+        if char_name:
+            removed = len(game_map.get(str(char_name), {}) or {})
+            game_map.pop(str(char_name), None)
+        else:
+            removed = sum(len(v or {}) for v in game_map.values() if isinstance(v, dict))
+            group_map[str(game)] = {}
+        data["_group_ranks"] = ranks
+        _save_json(data)
+        return removed
+
+
 async def reset_user_cfg(user_id: str, bot_id: str) -> None:
     async with _LOCK:
         data = _load_json()
