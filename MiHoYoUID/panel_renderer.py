@@ -2969,6 +2969,7 @@ def _draw_cons_distribution(
     y: int,
     cons_values: Any,
     fallback: Any = "",
+    max_x: int = 0,
 ) -> None:
     values = list(cons_values or [])
     if not values and fallback:
@@ -2978,7 +2979,7 @@ def _draw_cons_distribution(
         _text(draw, (x, y + 12), "0-6命分布 暂无", (202, 214, 234), FONT_TEXT)
         return
 
-    label_font = _font(17, True, "HYWH-65W.ttf")
+    label_font = _font(16, True, "HYWH-65W.ttf")
     rows = [values[:4], values[4:7]]
     for row_index, row_values in enumerate(rows):
         cur_x = x
@@ -2988,12 +2989,16 @@ def _draw_cons_distribution(
                 con_id = int(item.get("id"))
             except Exception:
                 con_id = row_values.index(item)
-            rate = _format_stat_rate(item.get("rate"))
+            rate = _format_stat_rate(item.get("rate")).replace(".00%", "%")
             text = f"{con_id}命 {rate}"
             text_width = draw.textlength(text, font=label_font)
-            box_w = int(text_width) + 20
+            box_w = int(text_width) + 16
+            if max_x and cur_x + box_w > max_x:
+                text = f"{con_id}命"
+                text_width = draw.textlength(text, font=label_font)
+                box_w = int(text_width) + 16
             _rounded_r(draw, (cur_x, cur_y, cur_x + box_w, cur_y + 24), 9, (34, 43, 66, 204), (82, 101, 143, 150), 1)
-            _text(draw, (cur_x + 10, cur_y + 3), text, (220, 230, 248), label_font)
+            _text(draw, (cur_x + 8, cur_y + 3), text, (220, 230, 248), label_font)
             cur_x += box_w + 8
 
 
@@ -3017,8 +3022,8 @@ async def render_stat_images(data: Dict[str, Any], title: str = "喵喵统计") 
     rate_font = _font(30, True, "NZBZ.ttf")
     card_width = 1280 if stat_kind == "cons_dist" else 1080
     card_right = card_width - 64
-    row_height = 96 if stat_kind == "cons_dist" else 78
-    row_card_height = 82 if stat_kind == "cons_dist" else 64
+    row_height = 108 if stat_kind == "cons_dist" else 78
+    row_card_height = 92 if stat_kind == "cons_dist" else 64
     for page_index, page_rows in enumerate(pages, start=1):
         height = max(760, 236 + len(page_rows) * row_height + 86)
         subtitle = f"共 {total} 条 · {source}数据 · 第 {page_index}/{len(pages)} 页"
@@ -3051,10 +3056,10 @@ async def render_stat_images(data: Dict[str, Any], title: str = "喵喵统计") 
                         detail += f" · 样本 {row.get('count')}"
                     _text(draw, (680, y + 21), _fit_text(detail or "暂无更多数据", 34), (202, 214, 234), FONT_TEXT)
                 else:
-                    _text(draw, (680, y + 12), "0-6命分布", (255, 232, 155), _font(18, True, "HYWH-65W.ttf"))
-                    _draw_cons_distribution(draw, 780, y + 10, row.get("cons_values"), row.get("cons"))
+                    _text(draw, (680, y + 8), "0-6命分布", (255, 232, 155), _font(18, True, "HYWH-65W.ttf"))
                     if row.get("count") not in (None, ""):
-                        _text(draw, (680, y + 54), f"样本 {row.get('count')}", (158, 174, 204), FONT_TINY)
+                        _text(draw, (792, y + 11), f"样本 {row.get('count')}", (158, 174, 204), FONT_TINY)
+                    _draw_cons_distribution(draw, 680, y + 34, row.get("cons_values"), row.get("cons"), card_right - 16)
                 y += row_height
                 continue
             else:
