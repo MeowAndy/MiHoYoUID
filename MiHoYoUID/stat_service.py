@@ -17,6 +17,8 @@ COMMON_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML
 
 URLS = {
     "cons": "https://api.lelaer.com/ys/getRoleAvg.php?star=all&lang=zh-Hans",
+    "cons_dist": "https://api.lelaer.com/ys/getRoleAvg.php?star=all&lang=zh-Hans",
+    "cons5": "https://api.lelaer.com/ys/getRoleAvg.php?star=all&lang=zh-Hans",
     "abyss": "https://api.yshelper.com/ys/getAbyssRank.php?star=all&role=all&lang=zh-Hans",
     "hard": "https://api.lelaer.com/ys/getAbyssRank2.php?star=all&role=all&lang=zh-Hans",
     "team": "http://miao.games/api/hutao?api=team",
@@ -116,14 +118,14 @@ async def fetch_stat(kind: str, force: bool = False) -> Dict[str, Any]:
         return cached
     try:
         async with httpx.AsyncClient(timeout=_timeout(), follow_redirects=True) as client:
-            raw = await _fetch_cons_stat(client) if kind == "cons" else await _fetch_json(client, URLS[kind])
+            raw = await _fetch_cons_stat(client) if kind in {"cons", "cons_dist", "cons5"} else await _fetch_json(client, URLS[kind])
     except Exception:
         cached = _read_cache(kind, ttl=86400 * 14)
         if cached:
             cached["cached"] = True
             return cached
         raise
-    payload = {"kind": kind, "url": URLS[kind], "raw": raw if kind == "cons" else _unwrap(raw), "cached": False, "updated": int(time.time()), "cache_version": CACHE_VERSION}
+    payload = {"kind": kind, "url": URLS[kind], "raw": raw if kind in {"cons", "cons_dist", "cons5"} else _unwrap(raw), "cached": False, "updated": int(time.time()), "cache_version": CACHE_VERSION}
     _write_cache(kind, payload)
     return payload
 
@@ -158,11 +160,19 @@ def _fmt_percent(value: Any) -> str:
     return f"{score:.2f}%" if score else "-"
 
 
+def _ratio_percent(value: Any) -> str:
+    try:
+        score = float(value) * 100
+    except (TypeError, ValueError):
+        return "-"
+    return f"{score:.2f}%" if score else "-"
+
+
 def _clean_name(value: Any) -> str:
     return "".join(str(value or "").split())
 
 
-def _normalize_cons_rows(payload: Dict[str, Any], limit: int) -> Dict[str, Any]:
+def _normalize_cons_rows(payload: Dict[str, Any], limit: int, mode: str = "hold", con_num: int = -1) -> Dict[str, Any]:
     raw = payload.get("raw")
     has_rows = raw.get("has_list") if isinstance(raw, dict) else []
     has_map = {}
@@ -181,10 +191,29 @@ def _normalize_cons_rows(payload: Dict[str, Any], limit: int) -> Dict[str, Any]:
         if name.startswith(("http://", "https://")):
             name = f"第{idx}项"
         own_rate = row.get("own_rate") or row.get("holdingRate") or has_map.get(_clean_name(name))
-        cons = row.get("avg_class") or row.get("avgCons") or row.get("cons") or ""
+        cons_values = []
+        for con_idx in range(7):
+            raw_value = row.get(f"c{con_idx}")
+            try:
+                value = float(raw_value or 0) / 100
+            except (TypeError, ValueError):
+                value = 0.0
+            if mode == "hold":
+                try:
+                    value *= float(own_rate or 0) / 100
+                except (TypeError, ValueError):
+                    value = 0.0
+            cons_values.append({"id": con_idx, "value": value, "rate": _ratio_percent(value)})
+        avg_cons = row.get("avg_class") or row.get("avgCons") or row.get("cons") or ""
         count = row.get("role_sum") or row.get("count") or row.get("total") or ""
-        score = _score_value(own_rate)
-        out.append({"rank": idx, "name": name, "rate": _fmt_percent(own_rate), "count": count, "cons": cons, "score": score, "raw": row})
+        score = cons_values[con_num]["value"] * 100 if 0 <= con_num <= 6 else _score_value(own_rate)
+        if mode == "cons":
+            rate = cons_values[con_num]["rate"] if 0 <= con_num <= 6 else _fmt_percent(own_rate)
+            cons = " / ".join(item["rate"] for item in cons_values)
+        else:
+            rate = _fmt_percent(own_rate)
+            cons = avg_cons
+        out.append({"rank": idx, "name": name, "rate": rate, "count": count, "cons": cons, "cons_values": cons_values, "mode": mode, "con_num": con_num, "score": score, "raw": row})
     out.sort(key=lambda x: x["score"], reverse=True)
     for idx, row in enumerate(out, start=1):
         row["rank"] = idx
@@ -194,7 +223,11 @@ def _normalize_cons_rows(payload: Dict[str, Any], limit: int) -> Dict[str, Any]:
 def normalize_stat_rows(payload: Dict[str, Any], limit: int = 24) -> Dict[str, Any]:
     kind = payload.get("kind") or "abyss"
     if kind == "cons":
-        return _normalize_cons_rows(payload, limit)
+        return _normalize_cons_rows(payload, limit, "hold")
+    if kind == "cons_dist":
+        return _normalize_cons_rows(payload, limit, "cons")
+    if kind == "cons5":
+        return _normalize_cons_rows(payload, limit, "cons", 5)
     raw = payload.get("raw")
     rows = _as_rows(raw)
     out: List[Dict[str, Any]] = []

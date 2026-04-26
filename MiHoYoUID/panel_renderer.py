@@ -2978,6 +2978,8 @@ async def render_stat_images(data: Dict[str, Any], title: str = "喵喵统计") 
     total = int(data.get("total_rows") or len(rows))
     source = "缓存" if data.get("cached") else "在线"
     game = "sr" if data.get("game") == "sr" else "gs"
+    stat_kind = str(data.get("kind") or "")
+    is_cons_stat = stat_kind in {"cons_dist", "cons5"}
     rate_font = _font(30, True, "NZBZ.ttf")
     for page_index, page_rows in enumerate(pages, start=1):
         height = max(760, 236 + len(page_rows) * 78 + 86)
@@ -3001,13 +3003,22 @@ async def render_stat_images(data: Dict[str, Any], title: str = "喵喵统计") 
                 _text(draw, (163, y + 18), name[:1], (255, 247, 222), FONT_TEXT)
             fit_name, name_font = _fit_font_text(draw, name, 278, [FONT_CARD_TITLE, FONT_HELP_CMD, FONT_TEXT], min_chars=3)
             _text(draw, (218, y + 8), fit_name, (255, 248, 232), name_font)
-            _text(draw, (218, y + 38), "角色持有统计", (164, 178, 205), FONT_TINY)
+            _text(draw, (218, y + 38), "角色命座统计" if is_cons_stat else "角色持有统计", (164, 178, 205), FONT_TINY)
             _text(draw, (520, y + 13), _format_stat_rate(row.get("rate")), (255, 232, 155), rate_font)
-            detail = ""
-            if row.get("cons") not in (None, ""):
-                detail += f"平均命座 {row.get('cons')}"
-            if row.get("count") not in (None, ""):
-                detail += f" · 样本 {row.get('count')}"
+            if is_cons_stat:
+                con_num = int(row.get("con_num") if row.get("con_num") is not None else -1)
+                if 0 <= con_num <= 6:
+                    detail = f"{con_num}命占比 {_format_stat_rate(row.get('rate'))}"
+                else:
+                    detail = f"0-6命分布 {row.get('cons') or '-'}"
+                if row.get("count") not in (None, ""):
+                    detail += f" · 样本 {row.get('count')}"
+            else:
+                detail = ""
+                if row.get("cons") not in (None, ""):
+                    detail += f"平均命座 {row.get('cons')}"
+                if row.get("count") not in (None, ""):
+                    detail += f" · 样本 {row.get('count')}"
             _text(draw, (660, y + 21), _fit_text(detail or "暂无更多数据", 30), (202, 214, 234), FONT_TEXT)
             y += 78
         _text(draw, (64, height - 44), "提示：统计数据来自 miao-plugin 同源公开接口，仅作参考。", (145, 160, 190), FONT_TINY)

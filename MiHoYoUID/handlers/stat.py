@@ -44,8 +44,12 @@ def _kind_title(text: str) -> tuple[str, str]:
         return "team", "喵喵深渊组队"
     if "幽境" in text or "危战" in text:
         return "hard", "喵喵幽境危战统计"
-    if "持有" in text or "命座" in text or "5命" in text or "满命" in text:
-        return "cons", "喵喵原神角色持有/命座统计"
+    if "持有" in text:
+        return "cons", "喵喵原神角色持有率"
+    if "5命" in text or "五命" in text:
+        return "cons5", "喵喵原神角色5命统计"
+    if "命座" in text or "满命" in text:
+        return "cons_dist", "喵喵原神角色命座统计"
     if "幻想" in text or "剧诗" in text:
         return "abyss", "喵喵幻想真境剧诗数据"
     return "abyss", "喵喵深渊出场率"
