@@ -11,6 +11,22 @@ from ..stat_service import (build_stat_placeholder, fetch_stat,
 
 sv_stat = SV("GsCoreMiao统计")
 
+STAT_COMMANDS = (
+    "角色持有率",
+    "角色命座统计",
+    "角色5命统计",
+    "深渊出场率",
+    "深渊使用率",
+    "深渊组队",
+    "深渊配队",
+    "深渊数据",
+    "幻想真境剧诗数据",
+    "幻想真境数据",
+    "幽境危战出场率",
+    "幽境危战使用率",
+    "幽境危战数据",
+)
+
 
 def _kind_title(text: str) -> tuple[str, str]:
     if "组队" in text or "配队" in text:
@@ -24,8 +40,17 @@ def _kind_title(text: str) -> tuple[str, str]:
     return "abyss", "喵喵深渊出场率"
 
 
+@sv_stat.on_fullmatch(STAT_COMMANDS, block=True)
+async def send_public_stat_fullmatch(bot: Bot, ev: Event):
+    await _send_public_stat(bot, ev)
+
+
 @sv_stat.on_regex(r"^(?P<cmd>角色持有率|角色命座统计|角色5命统计|深渊出场率|深渊使用率|深渊组队|深渊配队|深渊数据|幻想真境剧诗数据|幻想真境数据|幽境危战出场率|幽境危战使用率|幽境危战数据)$", block=True)
 async def send_public_stat(bot: Bot, ev: Event):
+    await _send_public_stat(bot, ev)
+
+
+async def _send_public_stat(bot: Bot, ev: Event):
     if not can_use_plugin(ev):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     text = (ev.regex_dict or {}).get("cmd") or getattr(ev, "raw_text", "") or ""

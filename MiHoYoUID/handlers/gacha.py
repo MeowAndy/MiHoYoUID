@@ -38,24 +38,35 @@ GACHA_COMMANDS = (
     "常驻抽卡统计",
     "集录池抽卡统计",
     "集录抽卡统计",
+    "UP池抽卡统计",
+    "up池抽卡统计",
     "原神抽卡统计",
     "原神抽卡记录",
     "原神祈愿统计",
+    "原神抽卡分析",
     "原神角色池抽卡统计",
     "原神武器池抽卡统计",
     "原神常驻池抽卡统计",
     "原神集录池抽卡统计",
+    "原神UP池抽卡统计",
+    "原神up池抽卡统计",
     "崩铁抽卡统计",
     "崩铁抽卡记录",
+    "崩铁祈愿统计",
+    "崩铁抽卡分析",
     "崩铁角色池抽卡统计",
     "崩铁光锥池抽卡统计",
     "崩铁常驻池抽卡统计",
     "星铁抽卡统计",
     "星铁抽卡记录",
+    "星铁祈愿统计",
+    "星铁抽卡分析",
     "星铁角色池抽卡统计",
     "星铁光锥池抽卡统计",
     "星铁常驻池抽卡统计",
 )
+
+GACHA_COMMAND_PREFIXES = tuple(f"{cmd} " for cmd in GACHA_COMMANDS)
 
 
 @sv_gacha.on_fullmatch(GACHA_COMMANDS, block=True)
@@ -70,6 +81,11 @@ async def send_gacha_stat(bot: Bot, ev: Event):
 
 @sv_gacha.on_regex(r"^(?:喵喵|miao|MM)?(?P<game>原神|崩铁|星铁)?(?P<pool>角色|武器|光锥|常驻|集录|up|UP)?池?(?P<cmd>抽卡记录|抽卡统计|抽奖记录|祈愿记录|祈愿统计|抽卡分析)\s+(?P<uid>\d{9,10})$", block=True)
 async def send_gacha_stat_with_uid(bot: Bot, ev: Event):
+    await _send_gacha_stat(bot, ev)
+
+
+@sv_gacha.on_prefix(GACHA_COMMAND_PREFIXES, block=True)
+async def send_gacha_stat_prefix_uid(bot: Bot, ev: Event):
     await _send_gacha_stat(bot, ev)
 
 
