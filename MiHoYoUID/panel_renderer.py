@@ -394,10 +394,17 @@ def _stat_face_map(game: str = "gs") -> Dict[str, Path]:
         if not char_root.exists():
             continue
         try:
-            for path in char_root.glob("*/imgs/face-q.webp"):
-                name = _clean_stat_name(path.parent.parent.name)
-                if name and name not in ret:
-                    ret[name] = path
+            for dirname in char_root.iterdir():
+                if not dirname.is_dir():
+                    continue
+                name = _clean_stat_name(dirname.name)
+                if not name or name in ret:
+                    continue
+                for file_name in ("face-q.webp", "face.webp", "avatar.webp", "side.webp"):
+                    path = dirname / "imgs" / file_name
+                    if path.exists():
+                        ret[name] = path
+                        break
         except Exception:
             continue
     return ret
@@ -2958,7 +2965,13 @@ def _split_pages(items: List[Any], page_size: int) -> List[List[Any]]:
 async def render_stat_images(data: Dict[str, Any], title: str = "喵喵统计") -> List[bytes]:
     rows = list(data.get("rows") or [])
     if not rows:
-        return [await render_status_card(title, [str(data.get("message") or "统计接口暂未返回数据"), "已按 miao-plugin 的胡桃/yshelper/lelaer 接口适配，接口异常会自动使用缓存。"], "统计数据")]
+        lines = [str(data.get("message") or "统计接口暂未返回数据")]
+        if data.get("kind") == "sr_cons":
+            lines.append("已拦截 MM崩铁角色持有率，避免被误识别为角色“角”面板。")
+            lines.append("本地 miao-plugin 仅实现原神持有率；崩铁同源公开接口当前不可用。")
+        else:
+            lines.append("已按 miao-plugin 的胡桃/yshelper/lelaer 接口适配，接口异常会自动使用缓存。")
+        return [await render_status_card(title, lines, "统计数据")]
     pages = _split_pages(rows, STAT_PAGE_SIZE)
     images: List[bytes] = []
     total = int(data.get("total_rows") or len(rows))

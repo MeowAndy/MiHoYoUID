@@ -12,11 +12,12 @@ from .path import MAIN_PATH
 
 STAT_CACHE_DIR = MAIN_PATH / "cache" / "stat"
 STAT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 COMMON_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 URLS = {
     "cons": "https://api.lelaer.com/ys/getRoleAvg.php?star=all&lang=zh-Hans",
+    "sr_cons": "https://api.lelaer.com/sr/getRoleAvg.php?star=all&lang=zh-Hans",
     "abyss": "https://api.yshelper.com/ys/getAbyssRank.php?star=all&role=all&lang=zh-Hans",
     "hard": "https://api.lelaer.com/ys/getAbyssRank2.php?star=all&role=all&lang=zh-Hans",
     "team": "http://miao.games/api/hutao?api=team",
@@ -110,6 +111,8 @@ async def _fetch_cons_stat(client: httpx.AsyncClient) -> Dict[str, Any]:
 
 async def fetch_stat(kind: str, force: bool = False) -> Dict[str, Any]:
     kind = kind if kind in URLS else "abyss"
+    if kind == "sr_cons":
+        raise RuntimeError("暂未找到 miao-plugin 同源可用的崩铁角色持有率公开接口")
     cached = None if force else _read_cache(kind)
     if cached:
         cached["cached"] = True
