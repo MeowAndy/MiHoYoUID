@@ -9,29 +9,78 @@ from .alias_data import CHARACTER_ALIASES
 from .wiki_service import get_char_wiki_data
 
 WEEK_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-MATERIAL_DAYS = {
-    "自由": [0, 3, 6], "抗争": [1, 4, 6], "诗文": [2, 5, 6],
-    "繁荣": [0, 3, 6], "勤劳": [1, 4, 6], "黄金": [2, 5, 6],
-    "浮世": [0, 3, 6], "风雅": [1, 4, 6], "天光": [2, 5, 6],
-    "诤言": [0, 3, 6], "巧思": [1, 4, 6], "笃行": [2, 5, 6],
-    "公平": [0, 3, 6], "正义": [1, 4, 6], "秩序": [2, 5, 6],
-    "角逐": [0, 3, 6], "焚燔": [1, 4, 6], "纷争": [2, 5, 6],
+CITY_NAMES = ["蒙德", "璃月", "稻妻", "须弥", "枫丹", "纳塔", "挪德卡莱"]
+TALENT_DAILY = {
+    1: ["自由", "繁荣", "浮世", "诤言", "公平", "角逐", "月光"],
+    2: ["抗争", "勤劳", "风雅", "巧思", "正义", "焚燔", "乐园"],
+    3: ["诗文", "黄金", "天光", "笃行", "秩序", "纷争", "浪迹"],
 }
+WEAPON_DAILY = {
+    1: ["高塔孤王", "孤云寒林", "远海夷地", "谧林涓露", "悠古弦音", "贡祭炽心", "奇巧秘器"],
+    2: ["凛风奔狼", "雾海云间", "鸣神御灵", "绿洲花园", "纯圣露滴", "谵妄圣主", "长夜燧火"],
+    3: ["狮牙斗士", "漆黑陨铁", "今昔剧画", "烈日威权", "无垢之海", "神合秘烟", "终北遗嗣"],
+}
+MATERIAL_DAYS = {
+    name: [group - 1, group + 2, 6]
+    for group, names in TALENT_DAILY.items()
+    for name in names
+}
+TALENT_ICON_LEVELS = ("教导", "指引", "哲学")
 
 
 def target_weekday(query: str = "") -> int:
     text = query or ""
     today = datetime.now()
+    if today.hour < 4:
+        today -= timedelta(days=1)
     if "周天" in text or "星期天" in text:
         return 6
     if "明" in text:
         return (today + timedelta(days=1)).weekday()
     if "后" in text:
         return (today + timedelta(days=2)).weekday()
+    digit = re.search(r"周([1-7])", text)
+    if digit:
+        return int(digit.group(1)) - 1
     for idx, word in enumerate(WEEK_CN):
         if word in text or word[-1] in text and "周" in text:
             return idx
     return today.weekday()
+
+
+def _daily_group(weekday: int) -> int:
+    return weekday % 3 + 1
+
+
+def _talent_icons(name: str) -> List[str]:
+    return [f"meta-gs/material/talent/「{name}」的{level}.webp" for level in TALENT_ICON_LEVELS]
+
+
+def _weapon_icon_prefix(name: str) -> str:
+    return f"meta-gs/material/weapon/{name}"
+
+
+def _build_public_rows(weekday: int, groups: Dict[str, List[str]]) -> List[Dict[str, Any]]:
+    group_ids = (1, 2, 3) if weekday == 6 else (_daily_group(weekday),)
+    rows: List[Dict[str, Any]] = []
+    for type_name, data in (("talent", TALENT_DAILY), ("weapon", WEAPON_DAILY)):
+        for group in group_ids:
+            for idx, material in enumerate(data[group]):
+                row: Dict[str, Any] = {
+                    "type": type_name,
+                    "group": group,
+                    "material": material,
+                    "city": CITY_NAMES[idx] if idx < len(CITY_NAMES) else "提瓦特",
+                    "characters": groups.get(material, [])[:18],
+                    "count": len(groups.get(material, [])),
+                }
+                if type_name == "talent":
+                    row["icons"] = _talent_icons(material)
+                else:
+                    row["icon_prefix"] = _weapon_icon_prefix(material)
+                    row["icons"] = []
+                rows.append(row)
+    return rows
 
 
 def _material_text(data: Dict[str, Any]) -> str:
@@ -70,7 +119,7 @@ def build_today_material(query: str = "") -> Dict[str, Any]:
             continue
         if weekday in MATERIAL_DAYS.get(book, []):
             groups[book].append(name)
-    rows = [{"material": key, "characters": value[:18], "count": len(value)} for key, value in sorted(groups.items())]
+    rows = _build_public_rows(weekday, groups)
     return {
         "weekday": weekday,
         "weekday_name": WEEK_CN[weekday],
@@ -78,5 +127,5 @@ def build_today_material(query: str = "") -> Dict[str, Any]:
         "all_open": weekday == 6,
         "rows": rows,
         "unknown_count": len(unknown),
-        "message": "周日全部天赋素材均开放" if weekday == 6 else "按角色天赋书聚合",
+        "message": "周日全部天赋/武器素材均开放" if weekday == 6 else "按 miao-plugin 每日材料轮换展示",
     }
