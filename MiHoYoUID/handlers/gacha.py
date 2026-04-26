@@ -32,8 +32,16 @@ def _game_from_text(text: str) -> str:
 
 
 def _strip_import_payload(text: str) -> str:
-    text = re.sub(r"^(?:喵喵|miao|MM)?(?:原神|崩铁|星铁)?导入抽卡记录", "", text or "", flags=re.I).strip()
+    text = re.sub(r"^(?:喵喵|miao|MM)?导入(?:原神|崩铁|星铁)抽卡记录", "", text or "", flags=re.I).strip()
     return text
+
+
+def _game_name(game: str) -> str:
+    return "崩铁" if game == "sr" else "原神"
+
+
+def _import_help_command(game: str) -> str:
+    return f"MM导入{_game_name(game)}抽卡记录帮助"
 
 
 def _extract_json_payload(text: str) -> object | None:
@@ -53,7 +61,7 @@ def _extract_json_payload(text: str) -> object | None:
 def _format_import_result(result: dict) -> str:
     if not result.get("ok"):
         return f"抽卡记录导入失败：{result.get('message') or '未知错误'}"
-    game_name = "崩铁" if result.get("game") == "sr" else "原神"
+    game_name = _game_name(str(result.get("game") or "gs"))
     lines = [
         f"【{game_name}抽卡记录导入完成】",
         f"UID：{result.get('uid')}",
@@ -67,19 +75,25 @@ def _format_import_result(result: dict) -> str:
     return "\n".join(lines)
 
 
-def _import_help() -> str:
+def _import_help(game: str) -> str:
+    game_name = _game_name(game)
+    action = "跃迁" if game == "sr" else "祈愿"
+    command = _import_help_command(game)
     return (
-        "【MM导入抽卡记录帮助】\n"
+        f"【{command}】\n"
         "miao-plugin 本体只读取本地 data/gachaJson 与 data/srJson，不负责抓取导入；本迁移版已补齐导入入口，并保存成同款目录结构。\n\n"
-        "方式一：发送游戏内抽卡历史链接\n"
-        "1. 打开游戏内祈愿/跃迁历史记录。\n"
+        f"方式一：发送游戏内{game_name}{action}历史链接\n"
+        f"1. 打开游戏内{action}历史记录。\n"
         "2. 复制带 authkey 的链接。\n"
-        "3. 发送：MM导入抽卡记录 <链接>\n"
-        "崩铁可发送：MM崩铁导入抽卡记录 <链接>\n\n"
+        f"3. 发送：MM导入{game_name}抽卡记录 <链接>\n\n"
         "方式二：导入 UIGF/JSON 文本\n"
-        "发送：MM导入抽卡记录 <JSON内容>\n\n"
+        f"发送：MM导入{game_name}抽卡记录 <JSON内容>\n\n"
         "注意：authkey 通常有效期较短；如果提示过期，请重新打开游戏历史记录复制链接。"
     )
+
+
+def _empty_gacha_message(game: str) -> str:
+    return f"当前{_game_name(game)}抽卡记录为空，请导入抽卡记录，发送【{_import_help_command(game)}】查看详情。"
 
 
 GACHA_COMMANDS = (
@@ -128,12 +142,17 @@ GACHA_COMMANDS = (
 GACHA_COMMAND_PREFIXES = tuple(f"{cmd} " for cmd in GACHA_COMMANDS)
 
 
-@sv_gacha.on_fullmatch(("导入抽卡记录帮助", "抽卡记录导入帮助", "抽卡帮助", "原神导入抽卡记录帮助", "崩铁导入抽卡记录帮助", "星铁导入抽卡记录帮助"), block=True)
+@sv_gacha.on_fullmatch(("导入原神抽卡记录帮助", "原神抽卡记录导入帮助", "原神抽卡帮助"), block=True)
 async def send_gacha_import_help(bot: Bot, ev: Event):
-    await bot.send(_import_help())
+    await bot.send(_import_help("gs"))
 
 
-@sv_gacha.on_regex(r"^(?:喵喵|miao|MM)?(?P<game>原神|崩铁|星铁)?导入抽卡记录(?!帮助)\s*(?P<payload>.*)$", block=True)
+@sv_gacha.on_fullmatch(("导入崩铁抽卡记录帮助", "导入星铁抽卡记录帮助", "崩铁抽卡记录导入帮助", "星铁抽卡记录导入帮助", "崩铁抽卡帮助", "星铁抽卡帮助"), block=True)
+async def send_sr_gacha_import_help(bot: Bot, ev: Event):
+    await bot.send(_import_help("sr"))
+
+
+@sv_gacha.on_regex(r"^(?:喵喵|miao|MM)?导入(?P<game>原神|崩铁|星铁)抽卡记录(?!帮助)\s*(?P<payload>.*)$", block=True)
 async def send_gacha_import(bot: Bot, ev: Event):
     if not can_use_plugin(ev):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
@@ -143,16 +162,16 @@ async def send_gacha_import(bot: Bot, ev: Event):
     payload = (data.get("payload") or _strip_import_payload(text)).strip()
     uid = await _uid_from_event(ev, payload or text, game)
     if not uid:
-        name = "崩铁" if game == "sr" else "原神"
-        return await bot.send(f"请先绑定 {name} UID，或在导入命令后携带 UID。\n可发送：MM导入抽卡记录帮助")
+        name = _game_name(game)
+        return await bot.send(f"请先绑定 {name} UID，或在导入命令后携带 UID。\n可发送：{_import_help_command(game)}")
     if not payload:
-        return await bot.send(_import_help())
+        return await bot.send(_import_help(game))
     if "authkey=" in payload and payload.startswith(("http://", "https://")):
         result = await import_gacha_authkey(game, str(ev.user_id or ""), uid, payload)
         return await bot.send(_format_import_result(result))
     raw_json = _extract_json_payload(text)
     if raw_json is None:
-        return await bot.send("未识别到可导入内容。请发送 authkey 链接或 UIGF/JSON 文本。\n可发送：MM导入抽卡记录帮助")
+        return await bot.send(f"未识别到可导入内容。请发送 authkey 链接或 UIGF/JSON 文本。\n可发送：{_import_help_command(game)}")
     result = import_gacha_json(game, str(ev.user_id or ""), uid, raw_json)
     await bot.send(_format_import_result(result))
 
@@ -188,4 +207,6 @@ async def _send_gacha_stat(bot: Bot, ev: Event):
         name = "崩铁" if game == "sr" else "原神"
         return await bot.send(f"请先绑定 {name} UID，或在命令后携带 UID。")
     result = analyze_gacha(game, str(ev.user_id or ""), uid, text)
+    if not result.get("ok") or not int(result.get("total") or 0):
+        return await bot.send(_empty_gacha_message(game))
     await bot.send(await render_gacha_image(result))
