@@ -16,6 +16,7 @@ from .panel_models import PanelResult
 
 Color = Tuple[int, int, int]
 WIKI_PAGE_MAX_HEIGHT = 1800
+STAT_PAGE_SIZE = 24
 
 CHARACTER_ID_NAMES: Dict[int, str] = {
     10000002: "神里绫华",
@@ -378,6 +379,41 @@ def _cover_image(path: Path | None, size: Tuple[int, int]) -> Image.Image | None
         return resized.crop((left, top, left + size[0], top + size[1]))
     except Exception:
         return None
+
+
+def _clean_stat_name(value: Any) -> str:
+    return "".join(str(value or "").split())
+
+
+@lru_cache(maxsize=2)
+def _stat_face_map(game: str = "gs") -> Dict[str, Path]:
+    folder = "meta-sr" if game == "sr" else "meta-gs"
+    ret: Dict[str, Path] = {}
+    for resource_dir in _resource_dirs():
+        char_root = resource_dir / folder / "character"
+        if not char_root.exists():
+            continue
+        try:
+            for path in char_root.glob("*/imgs/face-q.webp"):
+                name = _clean_stat_name(path.parent.parent.name)
+                if name and name not in ret:
+                    ret[name] = path
+        except Exception:
+            continue
+    return ret
+
+
+def _stat_face_path(name: Any, game: str = "gs") -> Path | None:
+    key = _clean_stat_name(name)
+    if not key:
+        return None
+    faces = _stat_face_map(game)
+    if key in faces:
+        return faces[key]
+    for face_name, path in faces.items():
+        if key in face_name or face_name in key:
+            return path
+    return None
 
 
 def _help_bg_path() -> Path | None:
@@ -2909,31 +2945,64 @@ def _item_time_for_render(item: Dict[str, Any]) -> str:
     return str(item.get("time") or item.get("gacha_time") or item.get("date") or "")[:19]
 
 
-async def render_stat_image(data: Dict[str, Any], title: str = "喵喵统计") -> bytes:
-    rows = list(data.get("rows") or [])[:24]
+def _format_stat_rate(rate: Any) -> str:
+    if isinstance(rate, (int, float)):
+        return f"{rate:.1f}%" if rate <= 100 else str(rate)
+    return str(rate or "-")
+
+
+def _split_pages(items: List[Any], page_size: int) -> List[List[Any]]:
+    return [items[i:i + page_size] for i in range(0, len(items), page_size)] or [[]]
+
+
+async def render_stat_images(data: Dict[str, Any], title: str = "喵喵统计") -> List[bytes]:
+    rows = list(data.get("rows") or [])
     if not rows:
-        return await render_status_card(title, [str(data.get("message") or "统计接口暂未返回数据"), "已按 miao-plugin 的胡桃/yshelper/lelaer 接口适配，接口异常会自动使用缓存。"], "统计数据")
-    height = max(760, 220 + len(rows) * 54 + 80)
-    img, draw = _miao_card_base(title, f"共 {data.get('total_rows', len(rows))} 条 · {'缓存' if data.get('cached') else '在线'}数据", height=height)
-    y = 196
-    for row in rows:
-        _rounded_r(draw, (64, y, 1016, y + 42), 14, (23, 32, 52, 210), (70, 86, 122), 1)
-        rank = int(row.get("rank") or 0)
-        color = (255, 218, 134) if rank <= 3 else (220, 228, 244)
-        _text(draw, (88, y + 8), f"#{rank}", color, FONT_HELP_DESC)
-        _text(draw, (160, y + 8), _fit_text(str(row.get("name") or "未知"), 18), (248, 244, 232), FONT_HELP_DESC)
-        rate = row.get("rate")
-        if isinstance(rate, (int, float)):
-            rate = f"{rate:.1f}%" if rate <= 100 else str(rate)
-        extra = f"{rate or '-'}"
-        if row.get("cons") not in (None, ""):
-            extra += f" · 命座 {row.get('cons')}"
-        if row.get("count") not in (None, ""):
-            extra += f" · 样本 {row.get('count')}"
-        _text(draw, (520, y + 8), _fit_text(extra, 34), (190, 202, 224), FONT_HELP_DESC)
-        y += 54
-    _text(draw, (64, height - 44), "提示：统计数据来自 miao-plugin 同源公开接口，仅作参考。", (145, 160, 190), FONT_TINY)
-    return await convert_img(img)
+        return [await render_status_card(title, [str(data.get("message") or "统计接口暂未返回数据"), "已按 miao-plugin 的胡桃/yshelper/lelaer 接口适配，接口异常会自动使用缓存。"], "统计数据")]
+    pages = _split_pages(rows, STAT_PAGE_SIZE)
+    images: List[bytes] = []
+    total = int(data.get("total_rows") or len(rows))
+    source = "缓存" if data.get("cached") else "在线"
+    game = "sr" if data.get("game") == "sr" else "gs"
+    rate_font = _font(30, True, "NZBZ.ttf")
+    for page_index, page_rows in enumerate(pages, start=1):
+        height = max(760, 236 + len(page_rows) * 78 + 86)
+        subtitle = f"共 {total} 条 · {source}数据 · 第 {page_index}/{len(pages)} 页"
+        img, draw = _miao_card_base(title, subtitle, height=height)
+        y = 196
+        for row in page_rows:
+            rank = int(row.get("rank") or 0)
+            name = str(row.get("name") or "未知")
+            top = rank <= 3
+            fill = (42, 34, 24, 226) if top else (23, 32, 52, 218)
+            outline = (232, 186, 94, 230) if top else (76, 94, 132, 190)
+            _rounded_r(draw, (64, y, 1016, y + 64), 20, fill, outline, 1)
+            rank_color = (255, 218, 134) if top else (222, 230, 246)
+            _text(draw, (88, y + 18), f"#{rank}", rank_color, FONT_HELP_CMD)
+            face = _avatar_circle(_stat_face_path(name, game), 54)
+            if face:
+                img.alpha_composite(face, (148, y + 5))
+            else:
+                _rounded_r(draw, (148, y + 5, 202, y + 59), 27, (74, 88, 122, 230), (122, 142, 184), 1)
+                _text(draw, (163, y + 18), name[:1], (255, 247, 222), FONT_TEXT)
+            fit_name, name_font = _fit_font_text(draw, name, 278, [FONT_CARD_TITLE, FONT_HELP_CMD, FONT_TEXT], min_chars=3)
+            _text(draw, (218, y + 8), fit_name, (255, 248, 232), name_font)
+            _text(draw, (218, y + 38), "角色持有统计", (164, 178, 205), FONT_TINY)
+            _text(draw, (520, y + 13), _format_stat_rate(row.get("rate")), (255, 232, 155), rate_font)
+            detail = ""
+            if row.get("cons") not in (None, ""):
+                detail += f"平均命座 {row.get('cons')}"
+            if row.get("count") not in (None, ""):
+                detail += f" · 样本 {row.get('count')}"
+            _text(draw, (660, y + 21), _fit_text(detail or "暂无更多数据", 30), (202, 214, 234), FONT_TEXT)
+            y += 78
+        _text(draw, (64, height - 44), "提示：统计数据来自 miao-plugin 同源公开接口，仅作参考。", (145, 160, 190), FONT_TINY)
+        images.append(await convert_img(img))
+    return images
+
+
+async def render_stat_image(data: Dict[str, Any], title: str = "喵喵统计") -> bytes:
+    return (await render_stat_images(data, title))[0]
 
 
 async def render_material_image(data: Dict[str, Any]) -> bytes:

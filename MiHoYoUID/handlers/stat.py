@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from gsuid_core.bot import Bot
 from gsuid_core.models import Event
+from gsuid_core.segment import MessageSegment
 from gsuid_core.sv import SV
 
 from ..auth import can_use_plugin
-from ..panel_renderer import render_stat_image
+from ..panel_renderer import render_stat_images
 from ..stat_service import (build_stat_placeholder, fetch_stat,
                             normalize_stat_rows)
 
@@ -61,7 +62,14 @@ async def _send_public_stat(bot: Bot, ev: Event):
     kind, title = _kind_title(text)
     try:
         payload = await fetch_stat(kind)
-        data = normalize_stat_rows(payload)
+        data = normalize_stat_rows(payload, limit=999)
     except Exception as e:
         data = build_stat_placeholder(kind, f"统计接口获取失败：{e}")
-    await bot.send(await render_stat_image(data, title))
+    images = await render_stat_images(data, title)
+    if len(images) == 1:
+        return await bot.send(images[0])
+    try:
+        await bot.send(MessageSegment.node(images))
+    except Exception:
+        for image in images:
+            await bot.send(image)
