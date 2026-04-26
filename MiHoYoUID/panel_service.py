@@ -7,6 +7,38 @@ from .panel_models import PanelResult, PanelSourceError
 from .panel_sources import get_source_order, get_source_with_context
 
 
+def _source_label(source: str) -> str:
+    labels = {
+        "miao": "Miao-Api",
+        "enka": "Enka-Api",
+        "mys": "米游社",
+        "mgg": "MiniGG-Api",
+        "hutao": "Hutao",
+        "mihomo": "Mihomo",
+        "avocado": "Avocado",
+        "enkahsr": "EnkaHSR",
+    }
+    return labels.get(str(source or "").lower(), source or "未知")
+
+
+def format_panel_query_errors(errors: List[str], source_order: List[str], game: str = "gs") -> str:
+    if not errors:
+        return "无可用数据源"
+    lines = []
+    if source_order:
+        lines.append("已尝试：" + " -> ".join(_source_label(x) for x in source_order))
+    for item in errors[:6]:
+        lines.append(f"- {item}")
+    if len(errors) > 6:
+        lines.append(f"……其余 {len(errors) - 6} 个错误已省略")
+    lines.append("建议：确认 UID 正确、游戏内展柜/角色详情已公开，并尝试切换面板服务为 auto。")
+    if game == "sr":
+        lines.append("星铁源推荐顺序：Mihomo / Avocado / EnkaHSR；米游社入口需要可用 Cookie。")
+    else:
+        lines.append("原神源推荐顺序：米游社 / Miao / Enka；Enka 需要公开展柜并等待缓存。")
+    return "\n".join(lines)
+
+
 def _avatar_count(result: PanelResult) -> int:
     avatars = result.avatars or []
     return len(avatars)
@@ -58,7 +90,7 @@ def render_panel_text(result: PanelResult) -> str:
     lines = [
         "【喵喵崩铁面板】" if is_sr else "【喵喵原神面板】",
         f"UID：{result.uid}",
-        f"数据源：{result.source}",
+        f"数据源：{_source_label(result.source)}",
     ]
     if result.nickname:
         lines.append(f"昵称：{result.nickname}")
@@ -85,6 +117,8 @@ async def query_panel(
     source_order = get_source_order(user_source, game)
     if allow_fallback is False and user_source and user_source != "auto":
         source_order = [user_source]
+    if not source_order:
+        return None, [f"未启用或不支持该面板服务：{user_source or 'auto'}"]
 
     for source_name in source_order:
         try:
@@ -98,4 +132,4 @@ async def query_panel(
             if not fallback:
                 break
 
-    return None, errors
+    return None, [format_panel_query_errors(errors, source_order, game)]

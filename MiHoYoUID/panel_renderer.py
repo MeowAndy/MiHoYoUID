@@ -916,10 +916,27 @@ def _cons_icon_path(name: str, idx: int, game: str = "gs") -> Path | None:
 
 
 def _char_image(name: str, kind: str = "splash", game: str = "gs") -> Path | None:
-    for file in (f"{kind}.webp", f"{kind}0.webp", f"{kind}.png"):
-        path = _resource_path("meta-sr" if game == "sr" else "meta-gs", "character", name, "imgs", file)
-        if path:
-            return path
+    base = "meta-sr" if game == "sr" else "meta-gs"
+    files = [f"{kind}.webp", f"{kind}0.webp", f"{kind}.png"]
+    if kind == "splash":
+        files.extend([
+            "splash1.webp",
+            "splash2.webp",
+            "gacha.webp",
+            "party.webp",
+            "stand.webp",
+            "profile.webp",
+            "card.webp",
+            "side.webp",
+            "img.webp",
+            "gacha.png",
+            "card.png",
+        ])
+    for file in dict.fromkeys(files):
+        for parts in ((base, "character", name, "imgs", file), ("character-img", name, file), ("profile", "normal-character", name, file)):
+            path = _resource_path(*parts)
+            if path:
+                return path
     return None
 
 
@@ -971,6 +988,14 @@ def _source_display_name(source: str) -> str:
         return "Enka-Api"
     if key in {"mys", "mihoyo", "hoyolab", "米游社"}:
         return "米游社"
+    if key in {"mihomo", "homo"}:
+        return "Mihomo"
+    if key in {"avocado"}:
+        return "Avocado"
+    if key in {"enkahsr", "enka-hsr", "enka_hsr"}:
+        return "EnkaHSR"
+    if key in {"auto"}:
+        return "Auto"
     return text or "MiniGG-Api"
 
 
@@ -1516,7 +1541,7 @@ def _draw_miao_header(img: Image.Image, draw: ImageDraw.ImageDraw, result: Panel
 
     _rounded_r(draw, (18, 22, 160, 54), 10, (0, 0, 0, 90))
     _text(draw, (30, 27), f"UID {result.uid}", (235, 230, 216), FONT_TINY)
-    src = f"数据源：{result.source}"
+    src = f"数据源：{_source_display_name(result.source)}"
     _rounded_r(draw, (width - 170, 22, width - 18, 54), 10, (0, 0, 0, 90))
     _text(draw, (width - 158, 27), src[:12], (235, 230, 216), FONT_TINY)
 
@@ -2436,7 +2461,7 @@ async def render_damage_image(result: PanelResult, character_query: str = "") ->
             note_lines: List[str] = []
             for note in notes:
                 note_lines.extend(_wrap_text_full(td, str(note), width - 150, small_font))
-            block_h = 74 + len(details) * 58 + max(1, len(note_lines)) * 22 + 24
+            block_h = 92 + len(details) * 58 + max(1, len(note_lines[:6])) * 22 + 30
             measured.append({**row, "note_lines": note_lines, "block_h": block_h})
             content_h += block_h + 18
     height = max(620, content_h + 70)
@@ -2448,7 +2473,17 @@ async def render_damage_image(result: PanelResult, character_query: str = "") ->
     draw = ImageDraw.Draw(img)
     title_text, title_font = _fit_font_text(draw, title, width - 260, [_font(46, True, "NZBZ.ttf"), FONT_PROFILE_TITLE, _font(34, True, "HYWH-65W.ttf")], 6)
     _shadow_text(draw, (52, 36), title_text, (255, 247, 222), title_font)
-    desc = f"UID {result.uid} · 数据源 {result.source} · 角色数 {len(rows)} · {datetime.now().strftime('%m-%d %H:%M')}"
+    context = (rows[0].get("context") if rows else {}) or {}
+    ctx_bits = []
+    if context:
+        ctx_bits.append(f"敌人Lv.{int(float(context.get('enemy_level') or (95 if is_sr else 90)))}")
+        ctx_bits.append(f"抗性{float(context.get('res') or 0.1) * 100:.0f}%")
+        reaction = str(context.get("reaction") or "auto")
+        if reaction and reaction != "auto":
+            ctx_bits.append(reaction)
+        if float(context.get("team_bonus") or 0) or float(context.get("team_atk") or 0) or float(context.get("team_hp") or 0) or float(context.get("break_bonus") or 0):
+            ctx_bits.append("组队Buff")
+    desc = f"UID {result.uid} · 数据源 {result.source} · 角色数 {len(rows)} · {' · '.join(ctx_bits) or '默认敌人/抗性'} · {datetime.now().strftime('%m-%d %H:%M')}"
     desc, desc_font = _fit_font_text(draw, desc, width - 104, [FONT_PROFILE_LABEL, _font(16, True, "HYWH-65W.ttf"), FONT_TINY], 8)
     _shadow_text(draw, (56, 102), desc, (220, 228, 244), desc_font)
     tag_box = (width - 194, 42, width - 54, 88)
@@ -2471,7 +2506,11 @@ async def render_damage_image(result: PanelResult, character_query: str = "") ->
         meta = f"Lv.{row.get('level')} · {'星魂' if is_sr else '命座'} {row.get('constellation')} · 模板：{row.get('template')}"
         meta, meta_font = _fit_font_text(draw, meta, width - 190, [small_font, FONT_TINY], 8)
         _text(draw, (132, y + 48), meta, (178, 190, 212), meta_font)
-        yy = y + 86
+        ctx = (row.get("context") or {}) if isinstance(row.get("context"), dict) else {}
+        ctx_text = f"防御/抗性区：Lv.{int(float(ctx.get('enemy_level') or (95 if is_sr else 90)))}｜抗性{float(ctx.get('res') or 0.1) * 100:.0f}%｜{'击破/超击破' if is_sr else '反应'}：{ctx.get('reaction') if ctx.get('reaction') != 'auto' else '模板默认'}"
+        ctx_text, cf = _fit_font_text(draw, ctx_text, width - 190, [FONT_TINY, _font(12, False, "HYWH-65W.ttf")], 8)
+        _text(draw, (132, y + 70), ctx_text, (136, 156, 186), cf)
+        yy = y + 104
         for detail in row.get("details") or []:
             title = str(detail.get("title") or "伤害")
             dmg = int(float(detail.get("dmg") or 0))
@@ -2483,11 +2522,11 @@ async def render_damage_image(result: PanelResult, character_query: str = "") ->
             _text(draw, (width - 190, yy + 12), f"期望 {avg:,}", (255, 232, 174), _font(17, True, "HYWH-65W.ttf"))
             yy += 58
         note_lines = row.get("note_lines") or ["基于当前公开面板与角色独立模板估算，实际轴伤会受队伍与敌人影响。"]
-        for line in note_lines:
+        for line in note_lines[:6]:
             _text(draw, (76, yy), "· " + line, (168, 180, 202), small_font)
             yy += 22
         y += block_h + 18
-    footer = "Created By Miao-Plugin & MiHoYoUID · 图片高度按内容自适应"
+    footer = "Created By Miao-Plugin & MiHoYoUID · 估算已计入敌人等级/防御/抗性/装备套装/组队关键词"
     footer, footer_font = _fit_font_text(draw, footer, width - 96, [small_font, _font(12, False, "HYWH-65W.ttf")], 10)
     _text(draw, (48, height - 46), footer, (150, 163, 190), footer_font)
     return await convert_img(img)

@@ -31,6 +31,12 @@ def _user_key(user_id: str, bot_id: str) -> str:
     return f"{bot_id}:{user_id}"
 
 
+def _uid_history(default_uid: str, roles: list[dict[str, Any]]) -> list[str]:
+    values = [default_uid]
+    values.extend(str(x.get("game_uid") or x.get("uid") or "") for x in roles if isinstance(x, dict))
+    return [x for x in dict.fromkeys(values) if x][:10]
+
+
 async def get_group_bot_self_id(group_id: str) -> str:
     if not group_id:
         return ""
@@ -135,7 +141,19 @@ async def reset_user_cfg(user_id: str, bot_id: str) -> None:
 
 async def bind_uid(user_id: str, bot_id: str, uid: str, game: str = "gs") -> Dict[str, Any]:
     key = "sr_uid" if game in {"sr", "starrail", "hkrpg"} else "uid"
-    return await set_user_cfg(user_id, bot_id, {key: uid})
+    list_key = "sr_uid_list" if game in {"sr", "starrail", "hkrpg"} else "uid_list"
+    async with _LOCK:
+        data = _load_json()
+        k = _user_key(user_id, bot_id)
+        old = data.get(k, {})
+        uid_list = old.get(list_key) if isinstance(old.get(list_key), list) else []
+        uid_list = [str(x) for x in uid_list if str(x).strip()]
+        if uid not in uid_list:
+            uid_list.append(uid)
+        merged = {**old, key: uid, list_key: uid_list[-10:], "updated_at": int(time.time())}
+        data[k] = merged
+        _save_json(data)
+        return merged
 
 
 async def bind_mys_cookie(
@@ -159,8 +177,10 @@ async def bind_mys_cookie(
     }
     if default_uid:
         patch["uid"] = default_uid
+        patch["uid_list"] = _uid_history(default_uid, roles)
     if default_sr_uid:
         patch["sr_uid"] = default_sr_uid
+        patch["sr_uid_list"] = _uid_history(default_sr_uid, sr_roles)
     return await set_user_cfg(user_id, bot_id, patch)
 
 
@@ -183,7 +203,9 @@ async def unbind_uid(user_id: str, bot_id: str, game: str = "gs") -> Dict[str, A
         k = _user_key(user_id, bot_id)
         old = data.get(k, {})
         merged = {**old, "updated_at": int(time.time())}
-        merged.pop("sr_uid" if game in {"sr", "starrail", "hkrpg"} else "uid", None)
+        is_sr = game in {"sr", "starrail", "hkrpg"}
+        merged.pop("sr_uid" if is_sr else "uid", None)
+        merged.pop("sr_uid_list" if is_sr else "uid_list", None)
         data[k] = merged
         _save_json(data)
         return merged

@@ -44,6 +44,18 @@ def _normalize_key(raw: str) -> str:
     return alias.get(raw, raw)
 
 
+def _uid_list_text(user_cfg: dict, game: str = "gs") -> str:
+    key = "sr_uid_list" if game == "sr" else "uid_list"
+    cur_key = "sr_uid" if game == "sr" else "uid"
+    current = str(user_cfg.get(cur_key) or "")
+    values = [str(x) for x in user_cfg.get(key, []) if str(x).strip()]
+    if current and current not in values:
+        values.insert(0, current)
+    if not values:
+        return "暂无历史 UID"
+    return "\n".join(f"{idx}. {uid}{'（当前）' if uid == current else ''}" for idx, uid in enumerate(values, start=1))
+
+
 @sv_admin.on_regex(r"^#?原神设置\s*(?P<key>[^\s]+)?\s*(?P<value>.*)$", block=True)
 async def miao_setting(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableMiaoSetting").data:
@@ -115,6 +127,11 @@ async def miao_setting(bot: Bot, ev: Event):
         return await bot.send(f"已设置面板服务为：{value}")
 
     if key.lower() == "uid":
+        if value in {"列表", "list", "ls"}:
+            user_cfg = merge_user_cfg(await get_user_cfg(ev.user_id, ev.bot_id))
+            return await bot.send("【原神 UID 列表】\n" + _uid_list_text(user_cfg))
+        if value.startswith(("切换", "选择", "使用")):
+            value = value.replace("切换", "", 1).replace("选择", "", 1).replace("使用", "", 1).strip()
         if value in {"", "解绑", "删除", "unset", "clear"}:
             await unbind_uid(ev.user_id, ev.bot_id)
             await add_history(ev, "UID解绑", "ok")
@@ -163,3 +180,51 @@ async def miao_setting(bot: Bot, ev: Event):
         return await bot.send(f"已设置数字分组为：{n}")
 
     await bot.send(f"暂不支持该设置项，请发送 {_cmd_prefix()}原神设置 查看帮助")
+
+
+@sv_admin.on_regex(r"^#?崩铁设置\s*(?P<key>[^\s]+)?\s*(?P<value>.*)$", block=True)
+async def miao_sr_setting(bot: Bot, ev: Event):
+    if not MiaoConfig.get_config("EnableMiaoSetting").data:
+        return
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+
+    key = _normalize_key((ev.regex_dict or {}).get("key", ""))
+    value = ((ev.regex_dict or {}).get("value", "") or "").strip()
+    prefix = _cmd_prefix()
+    if not key:
+        user_cfg = merge_user_cfg(await get_user_cfg(ev.user_id, ev.bot_id))
+        return await bot.send(
+            "【喵喵崩铁设置】\n"
+            f"绑定UID: {user_cfg.get('sr_uid') or '未绑定'}\n"
+            f"面板服务: {user_cfg.get('panel_server', 'auto')}\n\n"
+            "可用：\n"
+            f"{prefix}崩铁设置uid <UID|列表|切换 UID>\n"
+            f"{prefix}崩铁设置面板服务 <auto|miao|mihomo|avocado|enkahsr>"
+        )
+
+    if key == "面板服务":
+        allowed = {"auto", "miao", "mihomo", "avocado", "enkahsr", "mys"}
+        if value not in allowed:
+            return await bot.send(f"无效服务：{value}\n可选：auto|miao|mihomo|avocado|enkahsr|mys")
+        await set_user_cfg(ev.user_id, ev.bot_id, {"panel_server": value})
+        await add_history(ev, "崩铁面板服务", value)
+        return await bot.send(f"已设置崩铁面板服务为：{value}")
+
+    if key.lower() == "uid":
+        if value in {"列表", "list", "ls"}:
+            user_cfg = merge_user_cfg(await get_user_cfg(ev.user_id, ev.bot_id))
+            return await bot.send("【崩铁 UID 列表】\n" + _uid_list_text(user_cfg, "sr"))
+        if value.startswith(("切换", "选择", "使用")):
+            value = value.replace("切换", "", 1).replace("选择", "", 1).replace("使用", "", 1).strip()
+        if value in {"", "解绑", "删除", "unset", "clear"}:
+            await unbind_uid(ev.user_id, ev.bot_id, game="sr")
+            await add_history(ev, "崩铁UID解绑", "ok")
+            return await bot.send("已解绑崩铁 UID")
+        if not value.isdigit() or len(value) not in {9, 10}:
+            return await bot.send(f"请填写正确 UID，例如：{prefix}崩铁设置uid 800000001")
+        await bind_uid(ev.user_id, ev.bot_id, value, game="sr")
+        await add_history(ev, "崩铁UID绑定", value)
+        return await bot.send(f"已绑定崩铁 UID：{value}\n之后可直接使用：{prefix}崩铁面板 / {prefix}崩铁黄泉面板")
+
+    await bot.send(f"暂不支持该设置项，请发送 {prefix}崩铁设置 查看帮助")

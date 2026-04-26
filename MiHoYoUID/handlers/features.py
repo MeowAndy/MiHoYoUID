@@ -39,7 +39,10 @@ async def _query_user_panel(bot: Bot, ev: Event, uid: str, source_override: str 
     result, errors = await query_panel(uid, source, user_cfg, allow_fallback=allow_fallback, game=game)
     if result is None:
         detail = "\n".join(errors[:5]) if errors else "无可用数据源"
+        tip = "喵喵崩铁设置面板服务 auto" if game in {"sr", "starrail", "hkrpg"} else "喵喵原神设置面板服务 auto"
         await bot.send(f"面板数据查询失败。\n当前服务：{source}\n失败原因：\n{detail}")
+        if source != "auto":
+            await bot.send(f"可尝试切换自动数据源：{tip}")
     elif getattr(ev, "group_id", None) and (result.characters or []):
         await update_group_rank_records(result, str(ev.group_id), str(ev.user_id or ""))
     return result
@@ -76,6 +79,11 @@ def _resolve_name_for_game(raw_name: str, game: str = "gs") -> str:
 def _extract_uid_from_text(text: str) -> str:
     match = re.search(r"\b(\d{9,10})\b", text or "")
     return match.group(1) if match else ""
+
+
+def _damage_query_name(name: str, extra: str = "") -> str:
+    extra = re.sub(r"\b\d{9,10}\b", " ", extra or "")
+    return re.sub(r"\s+", " ", f"{name or ''} {extra or ''}").strip()
 
 
 async def _send_artifact_list(bot: Bot, ev: Event, uid: str) -> None:
@@ -134,7 +142,7 @@ async def send_char_wiki(bot: Bot, ev: Event):
 
 
 @sv_feature.on_regex(
-    r"^原神(?!(?:(?:米游社|mys)(?:全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)|更新面板|刷新面板|全部面板更新|重载面板|删除面板|解绑UID|解绑uid|角色面板图|面板图|面板列表|面板角色列表|角色列表|面板|角色面板|角色卡片|圣遗物列表|遗物列表|圣遗物评分|遗物评分|伤害计算|伤害估算)(?:\s|$))(?P<name>.+?)\s*(?P<mode>面板|面版|详情|详细|圣遗物|遗器|伤害)\s*(?P<uid>\d{9,10})?$",
+    r"^原神(?!(?:(?:米游社|mys)(?:全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)|更新面板|刷新面板|全部面板更新|重载面板|删除面板|解绑UID|解绑uid|角色面板图|面板图|面板列表|面板角色列表|角色列表|面板|角色面板|角色卡片|圣遗物列表|遗物列表|圣遗物评分|遗物评分|伤害计算|伤害估算)(?:\s|$))(?P<name>.+?)\s*(?P<mode>面板|面版|详情|详细|圣遗物|遗器|伤害)\s*(?P<extra>.*?)(?P<uid>\d{9,10})?$",
     block=True,
 )
 async def send_miao_style_profile(bot: Bot, ev: Event):
@@ -147,7 +155,7 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
     if mode in {"圣遗物", "遗器"} and name.startswith(("列表", "评分列表")):
         uid_in_name = _extract_uid_from_text(name)
         return await _send_artifact_list(bot, ev, uid_in_name or (data.get("uid") or "").strip())
-    uid = await _uid_from_event(ev, (data.get("uid") or "").strip())
+    uid = await _uid_from_event(ev, (data.get("uid") or "").strip() or _extract_uid_from_text(data.get("extra") or ""))
     if not uid:
         return await bot.send(f"请携带 UID，例如：喵喵原神{name}{mode} 100000001\n也可先绑定：喵喵原神设置uid 100000001")
 
@@ -166,10 +174,11 @@ async def send_miao_style_profile(bot: Bot, ev: Event):
     if mode == "伤害":
         if not MiaoConfig.get_config("EnableDamageCalc").data:
             return
+        damage_name = _damage_query_name(name, data.get("extra") or "")
         try:
-            return await bot.send(await render_damage_image(result, name))
+            return await bot.send(await render_damage_image(result, damage_name))
         except Exception as e:
-            return await bot.send(f"伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, name)}")
+            return await bot.send(f"伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, damage_name)}")
 
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -243,6 +252,26 @@ async def send_damage(bot: Bot, ev: Event):
             await bot.send(f"伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, name)}")
 
 
+@sv_feature.on_regex(r"^原神(?P<name>.+?)伤害\s*(?P<extra>.*?)(?P<uid>\d{9,10})?$", block=True)
+async def send_miao_style_damage(bot: Bot, ev: Event):
+    if not MiaoConfig.get_config("EnableDamageCalc").data:
+        return
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    data = ev.regex_dict or {}
+    name = _resolve_name(data.get("name") or "")
+    damage_name = _damage_query_name(name, data.get("extra") or "")
+    uid = await _uid_from_event(ev, (data.get("uid") or "").strip() or _extract_uid_from_text(data.get("extra") or ""))
+    if not uid:
+        return await bot.send(f"请携带 UID，例如：喵喵原神{name}伤害 100000001\n也可先绑定：喵喵原神设置uid 100000001")
+    result = await _query_user_panel(bot, ev, uid)
+    if result:
+        try:
+            await bot.send(await render_damage_image(result, damage_name))
+        except Exception as e:
+            await bot.send(f"伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, damage_name)}")
+
+
 @sv_feature.on_regex(r"^崩铁(伤害计算|伤害估算|伤害)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
 async def send_sr_damage(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableDamageCalc").data:
@@ -260,6 +289,26 @@ async def send_sr_damage(bot: Bot, ev: Event):
             await bot.send(await render_damage_image(result, name))
         except Exception as e:
             await bot.send(f"崩铁伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, name)}")
+
+
+@sv_feature.on_regex(r"^崩铁(?P<name>.+?)伤害\s*(?P<extra>.*?)(?P<uid>\d{9,10})?$", block=True)
+async def send_sr_miao_style_damage(bot: Bot, ev: Event):
+    if not MiaoConfig.get_config("EnableDamageCalc").data:
+        return
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    data = ev.regex_dict or {}
+    name = _resolve_name_for_game(data.get("name") or "", game="sr")
+    damage_name = _damage_query_name(name, data.get("extra") or "")
+    uid = await _uid_from_event(ev, (data.get("uid") or "").strip() or _extract_uid_from_text(data.get("extra") or ""), game="sr")
+    if not uid:
+        return await bot.send(f"请携带 UID，例如：喵喵崩铁{name}伤害 100000001\n也可先登录或绑定：喵喵登录 / 喵喵崩铁设置uid 100000001")
+    result = await _query_user_panel(bot, ev, uid, game="sr")
+    if result:
+        try:
+            await bot.send(await render_damage_image(result, damage_name))
+        except Exception as e:
+            await bot.send(f"崩铁伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, damage_name)}")
 
 
 @sv_feature.on_regex(r"^崩铁(?P<name>.*?)(群内|群)?(?P<kind>最强|最高分|第一|最高|最牛|最多|排名|排行|排行榜|排行版)(榜)?$", block=True)
@@ -283,7 +332,7 @@ async def send_sr_group_rank_first(bot: Bot, ev: Event):
 
 
 @sv_feature.on_regex(
-    r"^崩铁(?!(?:(?:米游社|mys)(?:全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)|更新面板|刷新面板|全部面板更新|重载面板|删除面板|解绑UID|解绑uid|面板列表|面板角色列表|角色列表|面板角色|角色面板|面板|遗器列表|圣遗物列表|(?:面板|喵喵)?练度统计)(?:\s|$))(?!(?:.*(?:最强|最高分|第一|最高|最牛|最多|排名|排行|排行榜|排行版|榜))$)(?P<name>.+?)\s*(?P<mode>面板|面版|详情|详细|遗器|圣遗物|光锥|伤害)?\s*(?P<uid>\d{9,10})?$",
+    r"^崩铁(?!(?:(?:米游社|mys)(?:全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)|更新面板|刷新面板|全部面板更新|重载面板|删除面板|解绑UID|解绑uid|面板列表|面板角色列表|角色列表|面板角色|角色面板|面板|遗器列表|圣遗物列表|(?:面板|喵喵)?练度统计)(?:\s|$))(?!(?:.*(?:最强|最高分|第一|最高|最牛|最多|排名|排行|排行榜|排行版|榜))$)(?P<name>.+?)\s*(?P<mode>面板|面版|详情|详细|遗器|圣遗物|光锥|伤害)?\s*(?P<extra>.*?)(?P<uid>\d{9,10})?$",
     block=True,
 )
 async def send_sr_miao_style_profile(bot: Bot, ev: Event):
@@ -293,7 +342,7 @@ async def send_sr_miao_style_profile(bot: Bot, ev: Event):
     data = ev.regex_dict or {}
     name = _resolve_name_for_game(data.get("name") or "", game="sr")
     mode = (data.get("mode") or "面板").strip()
-    uid = await _uid_from_event(ev, (data.get("uid") or "").strip(), game="sr")
+    uid = await _uid_from_event(ev, (data.get("uid") or "").strip() or _extract_uid_from_text(data.get("extra") or ""), game="sr")
     if not uid:
         return await bot.send(f"请携带 UID，例如：喵喵崩铁{name}{mode} 100000001\n也可先登录或绑定：喵喵登录 / 喵喵崩铁设置uid 100000001")
 
@@ -312,10 +361,11 @@ async def send_sr_miao_style_profile(bot: Bot, ev: Event):
     if mode == "伤害":
         if not MiaoConfig.get_config("EnableDamageCalc").data:
             return
+        damage_name = _damage_query_name(name, data.get("extra") or "")
         try:
-            return await bot.send(await render_damage_image(result, name))
+            return await bot.send(await render_damage_image(result, damage_name))
         except Exception as e:
-            return await bot.send(f"崩铁伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, name)}")
+            return await bot.send(f"崩铁伤害估算图渲染失败，已回退文本：{e}\n\n{render_damage_text(result, damage_name)}")
 
     if not MiaoConfig.get_config("EnablePanelQuery").data:
         return
@@ -459,13 +509,13 @@ async def send_panel_update(bot: Bot, ev: Event):
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
     if not uid:
         return await bot.send("请携带 UID，例如：喵喵原神更新面板 100000001\n也可先绑定：喵喵原神设置uid 100000001")
-    clear_cached_panel(uid)
+    cleared = clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid)
     if result:
         try:
             await bot.send(await render_panel_list_image(result, updated=True))
         except Exception as e:
-            await bot.send(f"面板已刷新：{uid}\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
+            await bot.send(f"面板已刷新：{uid}\n本地缓存清理：{cleared} 条\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
 @sv_feature.on_regex(r"^崩铁(更新面板|刷新面板|全部面板更新|重载面板)\s*(?P<uid>\d{9,10})?$", block=True)
@@ -477,13 +527,13 @@ async def send_sr_panel_update(bot: Bot, ev: Event):
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip(), game="sr")
     if not uid:
         return await bot.send("请携带 UID，例如：喵喵崩铁更新面板 100000001\n也可先登录或绑定：喵喵登录 / 喵喵崩铁设置uid 100000001")
-    clear_cached_panel(uid)
+    cleared = clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid, game="sr")
     if result:
         try:
             await bot.send(await render_panel_list_image(result, updated=True))
         except Exception as e:
-            await bot.send(f"崩铁面板已刷新：{uid}\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
+            await bot.send(f"崩铁面板已刷新：{uid}\n本地缓存清理：{cleared} 条\n数据源：{result.source}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
 @sv_feature.on_regex(r"^原神(米游社|mys)(全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)\s*(?P<uid>\d{9,10})?$", block=True)
@@ -495,13 +545,13 @@ async def send_mys_panel_update(bot: Bot, ev: Event):
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
     if not uid:
         return await bot.send("请携带 UID，例如：喵喵原神米游社更新面板 100000001\n也可先绑定：喵喵原神设置uid 100000001")
-    clear_cached_panel(uid)
+    cleared = clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid, source_override="mys", allow_fallback=False)
     if result:
         try:
             await bot.send(await render_panel_list_image(result, updated=True))
         except Exception as e:
-            await bot.send(f"米游社面板已刷新：{uid}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
+            await bot.send(f"米游社面板已刷新：{uid}\n本地缓存清理：{cleared} 条\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
 @sv_feature.on_regex(r"^崩铁(米游社|mys)(全部面板更新|更新全部面板|获取游戏角色详情|更新面板|面板更新)\s*(?P<uid>\d{9,10})?$", block=True)
@@ -513,13 +563,13 @@ async def send_sr_mys_panel_update(bot: Bot, ev: Event):
     uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip(), game="sr")
     if not uid:
         return await bot.send("请携带 UID，例如：喵喵崩铁米游社更新面板 100000001\n也可先登录或绑定：喵喵登录 / 喵喵崩铁设置uid 100000001")
-    clear_cached_panel(uid)
+    cleared = clear_cached_panel(uid)
     result = await _query_user_panel(bot, ev, uid, source_override="mys", allow_fallback=False, game="sr")
     if result:
         try:
             await bot.send(await render_panel_list_image(result, updated=True))
         except Exception as e:
-            await bot.send(f"崩铁米游社面板已刷新：{uid}\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
+            await bot.send(f"崩铁米游社面板已刷新：{uid}\n本地缓存清理：{cleared} 条\n角色数：{len(result.characters or result.avatars or [])}\n列表图渲染失败：{e}")
 
 
 @sv_feature.on_regex(r"^原神(删除面板|解绑UID|解绑uid)\s*(?P<uid>\d{9,10})?$", block=True)
@@ -528,8 +578,10 @@ async def send_panel_delete(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     from ..store import unbind_uid
 
+    uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip())
+    cleared = clear_cached_panel(uid) if uid else 0
     await unbind_uid(ev.user_id, ev.bot_id)
-    await bot.send("已删除本地绑定 UID。第三方面板源缓存暂不支持远程删除。")
+    await bot.send(f"已删除本地绑定 UID，并清理本地面板缓存 {cleared} 条。第三方面板源缓存暂不支持远程删除。")
 
 
 @sv_feature.on_regex(r"^崩铁(删除面板|解绑UID|解绑uid)\s*(?P<uid>\d{9,10})?$", block=True)
@@ -538,5 +590,7 @@ async def send_sr_panel_delete(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
     from ..store import unbind_uid
 
+    uid = await _uid_from_event(ev, ((ev.regex_dict or {}).get("uid") or "").strip(), game="sr")
+    cleared = clear_cached_panel(uid) if uid else 0
     await unbind_uid(ev.user_id, ev.bot_id, game="sr")
-    await bot.send("已删除本地绑定的崩铁 UID。第三方面板源缓存暂不支持远程删除。")
+    await bot.send(f"已删除本地绑定的崩铁 UID，并清理本地面板缓存 {cleared} 条。第三方面板源缓存暂不支持远程删除。")

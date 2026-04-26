@@ -140,6 +140,9 @@ FLAT_PROP_MAX = {
     "FIGHT_PROP_DEFENSE": (23.15, 7.3),
 }
 
+POS_MAX_MARK_GS = {1: 46.6, 2: 46.6, 3: 66.0, 4: 66.0, 5: 66.0}
+POS_MAX_MARK_SR = {1: 66.0, 2: 66.0, 3: 66.0, 4: 66.0, 5: 66.0, 6: 66.0}
+
 
 def _as_float(value: Any, default: float = 0.0) -> float:
     try:
@@ -178,7 +181,10 @@ def _artifact_sets(char: Dict[str, Any]) -> Dict[str, int]:
     for rel in char.get("reliquaries") or []:
         if not isinstance(rel, dict):
             continue
-        set_name = str(rel.get("set_name") or "")
+        set_value = rel.get("set_name") or rel.get("setName") or rel.get("set") or rel.get("set_id") or rel.get("setId") or ""
+        if isinstance(set_value, dict):
+            set_value = set_value.get("name") or set_value.get("set_name") or set_value.get("id") or ""
+        set_name = str(set_value or "")
         if set_name and not set_name.isdigit():
             sets[set_name] = sets.get(set_name, 0) + 1
     return sets
@@ -243,9 +249,30 @@ def _sub_value(prop: Any, max_values: Dict[str, float] | None = None) -> float:
 
 
 def _artifact_pos_index(reliq: Dict[str, Any], fallback_idx: int = 0) -> int:
-    pos = reliq.get("pos")
+    pos = reliq.get("pos") or reliq.get("position") or reliq.get("slot") or reliq.get("idx") or reliq.get("equipType") or reliq.get("relicType")
     if pos in ARTIFACT_SLOT_INDEX:
         return ARTIFACT_SLOT_INDEX[pos]
+    if isinstance(pos, str):
+        normalized = pos.upper()
+        if normalized in ARTIFACT_SLOT_INDEX:
+            return ARTIFACT_SLOT_INDEX[normalized]
+        slot_alias = {
+            "FLOWER": 1,
+            "PLUME": 2,
+            "SANDS": 3,
+            "GOBLET": 4,
+            "CIRCLET": 5,
+            "HEAD": 1,
+            "HAND": 2,
+            "BODY": 3,
+            "FOOT": 4,
+            "NECK": 5,
+            "OBJECT": 5,
+            "ROPE": 6,
+        }
+        for key, value in slot_alias.items():
+            if key in normalized:
+                return value
     try:
         num = int(pos)
         if 1 <= num <= 6:
@@ -304,7 +331,8 @@ def _prop_score(prop: Any, weight: Dict[str, float], main: bool = False, max_val
 def score_reliquary(reliq: Dict[str, Any], weight: Dict[str, float], fallback_idx: int = 0, game: str = "gs") -> float:
     score = 0.0
     max_values = SR_MAX_SUB_VALUE if game == "sr" else MAX_SUB_VALUE
-    if _artifact_pos_index(reliq, fallback_idx) >= 3:
+    pos = _artifact_pos_index(reliq, fallback_idx)
+    if game == "sr" or pos >= 3:
         score += _prop_score(reliq.get("main_prop"), weight, True, max_values)
     for prop in reliq.get("sub_props") or []:
         if isinstance(prop, dict):
@@ -315,7 +343,8 @@ def score_reliquary(reliq: Dict[str, Any], weight: Dict[str, float], fallback_id
     level = _as_float(reliq.get("level"), 1)
     score *= 1 + max(rarity - 4, 0) * 0.03
     score *= min(max(level, 1), 21) / 21
-    return round(min(score, 66), 1)
+    pos_max = (POS_MAX_MARK_SR if game == "sr" else POS_MAX_MARK_GS).get(pos, 66.0)
+    return round(min(score, pos_max), 1)
 
 
 def character_artifact_score(char: Dict[str, Any]) -> Tuple[float, List[float], str]:
