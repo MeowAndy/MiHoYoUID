@@ -82,16 +82,25 @@ async def run_daily_sign_for_cfg(cfg: dict, specified_uid: str = "") -> tuple[li
     if not cookie:
         return [], ["当前未登录"]
     sr_roles = cfg.get("mys_sr_roles") or []
+    sr_fetch_error = ""
     if not sr_roles:
         try:
             sr_roles = await fetch_starrail_roles(cookie)
             cfg = {**cfg, "mys_sr_roles": sr_roles}
-        except Exception:
+        except Exception as e:
+            sr_fetch_error = str(e)
             sr_roles = []
 
     gs_uids, sr_uids = get_sign_uids_for_cfg(cfg, specified_uid)
     sections: list[str] = []
     errors: list[str] = []
+
+    if not specified_uid and not sr_uids:
+        default_sr_uid = str(cfg.get("sr_uid") or "").strip()
+        if sr_fetch_error:
+            errors.append(f"崩铁角色列表获取失败：{sr_fetch_error}")
+        elif default_sr_uid:
+            errors.append(f"崩铁 {default_sr_uid}：未找到可签到的崩铁角色，请发送 喵喵查看登录 确认登录信息")
 
     for gs_uid in gs_uids:
         try:
@@ -253,7 +262,10 @@ async def send_daily_sign(bot: Bot, ev: Event):
     sections, errors = await run_daily_sign_for_cfg(cfg, specified_uid)
 
     if sections:
-        return await bot.send("\n\n".join(sections))
+        msg = "\n\n".join(sections)
+        if errors:
+            msg += "\n\n⚠️ 以下账号签到未完成：\n" + "\n".join(errors)
+        return await bot.send(msg)
     if errors:
         return await bot.send("签到失败：" + "；".join(errors))
     await bot.send("没有找到可签到的原神或崩铁 UID，请重新登录或使用：喵喵签到 <UID>")
