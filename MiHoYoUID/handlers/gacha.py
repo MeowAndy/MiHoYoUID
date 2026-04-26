@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
+import re
+
 from gsuid_core.bot import Bot
 from gsuid_core.models import Event
 from gsuid_core.sv import SV
 
 from ..auth import can_use_plugin
-from ..gacha_service import analyze_gacha, extract_uid
+from ..gacha_service import (analyze_gacha, extract_uid, import_gacha_authkey,
+                             import_gacha_json)
 from ..panel_renderer import render_gacha_image
 from ..settings import merge_user_cfg
 from ..store import get_user_cfg
@@ -21,6 +25,61 @@ async def _uid_from_event(ev: Event, text: str, game: str) -> str:
     if game == "sr":
         return str(cfg.get("sr_uid") or "")
     return str(cfg.get("uid") or "")
+
+
+def _game_from_text(text: str) -> str:
+    return "sr" if "崩铁" in text or "星铁" in text else "gs"
+
+
+def _strip_import_payload(text: str) -> str:
+    text = re.sub(r"^(?:喵喵|miao|MM)?(?:原神|崩铁|星铁)?导入抽卡记录", "", text or "", flags=re.I).strip()
+    return text
+
+
+def _extract_json_payload(text: str) -> object | None:
+    payload = _strip_import_payload(text)
+    if not payload:
+        return None
+    start_candidates = [idx for idx in (payload.find("{"), payload.find("[")) if idx >= 0]
+    if not start_candidates:
+        return None
+    raw = payload[min(start_candidates):].strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _format_import_result(result: dict) -> str:
+    if not result.get("ok"):
+        return f"抽卡记录导入失败：{result.get('message') or '未知错误'}"
+    game_name = "崩铁" if result.get("game") == "sr" else "原神"
+    lines = [
+        f"【{game_name}抽卡记录导入完成】",
+        f"UID：{result.get('uid')}",
+        f"新增：{result.get('added', 0)} 条",
+        f"当前总计：{result.get('total', 0)} 条",
+    ]
+    pools = result.get("pools") or {}
+    if pools:
+        lines.append("卡池：" + " / ".join(f"{name}{count}" for name, count in pools.items()))
+    lines.append("可继续使用：MM抽卡统计 / MM崩铁抽卡统计")
+    return "\n".join(lines)
+
+
+def _import_help() -> str:
+    return (
+        "【MM导入抽卡记录帮助】\n"
+        "miao-plugin 本体只读取本地 data/gachaJson 与 data/srJson，不负责抓取导入；本迁移版已补齐导入入口，并保存成同款目录结构。\n\n"
+        "方式一：发送游戏内抽卡历史链接\n"
+        "1. 打开游戏内祈愿/跃迁历史记录。\n"
+        "2. 复制带 authkey 的链接。\n"
+        "3. 发送：MM导入抽卡记录 <链接>\n"
+        "崩铁可发送：MM崩铁导入抽卡记录 <链接>\n\n"
+        "方式二：导入 UIGF/JSON 文本\n"
+        "发送：MM导入抽卡记录 <JSON内容>\n\n"
+        "注意：authkey 通常有效期较短；如果提示过期，请重新打开游戏历史记录复制链接。"
+    )
 
 
 GACHA_COMMANDS = (
@@ -67,6 +126,35 @@ GACHA_COMMANDS = (
 )
 
 GACHA_COMMAND_PREFIXES = tuple(f"{cmd} " for cmd in GACHA_COMMANDS)
+
+
+@sv_gacha.on_fullmatch(("导入抽卡记录帮助", "抽卡记录导入帮助", "抽卡帮助", "原神导入抽卡记录帮助", "崩铁导入抽卡记录帮助", "星铁导入抽卡记录帮助"), block=True)
+async def send_gacha_import_help(bot: Bot, ev: Event):
+    await bot.send(_import_help())
+
+
+@sv_gacha.on_regex(r"^(?:喵喵|miao|MM)?(?P<game>原神|崩铁|星铁)?导入抽卡记录(?!帮助)\s*(?P<payload>.*)$", block=True)
+async def send_gacha_import(bot: Bot, ev: Event):
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    text = getattr(ev, "raw_text", "") or ""
+    data = ev.regex_dict or {}
+    game = "sr" if data.get("game") in {"崩铁", "星铁"} or _game_from_text(text) == "sr" else "gs"
+    payload = (data.get("payload") or _strip_import_payload(text)).strip()
+    uid = await _uid_from_event(ev, payload or text, game)
+    if not uid:
+        name = "崩铁" if game == "sr" else "原神"
+        return await bot.send(f"请先绑定 {name} UID，或在导入命令后携带 UID。\n可发送：MM导入抽卡记录帮助")
+    if not payload:
+        return await bot.send(_import_help())
+    if "authkey=" in payload and payload.startswith(("http://", "https://")):
+        result = await import_gacha_authkey(game, str(ev.user_id or ""), uid, payload)
+        return await bot.send(_format_import_result(result))
+    raw_json = _extract_json_payload(text)
+    if raw_json is None:
+        return await bot.send("未识别到可导入内容。请发送 authkey 链接或 UIGF/JSON 文本。\n可发送：MM导入抽卡记录帮助")
+    result = import_gacha_json(game, str(ev.user_id or ""), uid, raw_json)
+    await bot.send(_format_import_result(result))
 
 
 @sv_gacha.on_fullmatch(GACHA_COMMANDS, block=True)

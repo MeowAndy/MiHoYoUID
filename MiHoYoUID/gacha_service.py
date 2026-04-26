@@ -6,6 +6,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+import httpx
+
 from .path import MAIN_PATH
 
 POOL_MAP_GS = {
@@ -19,6 +21,10 @@ POOL_MAP_SR = {
     "光锥": ["12"],
     "常驻": ["1", "2"],
 }
+GACHA_API_URL = "https://hk4e-api.mihoyo.com/event/gacha_info/api/getGachaLog"
+SR_GACHA_API_URL = "https://api-takumi.mihoyo.com/common/gacha_record/api/getGachaLog"
+POOL_ALIASES_GS = {"301": "301", "400": "301", "302": "302", "200": "200", "500": "500"}
+POOL_ALIASES_SR = {"11": "11", "12": "12", "1": "1", "2": "1"}
 
 FIVE_STAR_GS = {
     "神里绫华", "琴", "迪卢克", "温迪", "可莉", "钟离", "达达利亚", "魈", "甘雨", "阿贝多", "胡桃", "优菈", "枫原万叶", "宵宫", "雷电将军", "珊瑚宫心海", "荒泷一斗", "八重神子", "夜兰", "提纳里", "赛诺", "妮露", "纳西妲", "流浪者", "艾尔海森", "迪希雅", "白术", "林尼", "那维莱特", "莱欧斯利", "芙宁娜", "娜维娅", "闲云", "千织", "阿蕾奇诺", "克洛琳德", "希格雯", "艾梅莉埃", "玛拉妮", "基尼奇", "希诺宁", "恰斯卡", "玛薇卡", "茜特菈莉",
@@ -40,6 +46,20 @@ def _candidate_roots(game: str, user_id: str, uid: str) -> List[Path]:
         _plugin_root() / "data" / folder / user_id / uid,
         _plugin_root().parent / "miao-plugin" / "data" / folder / user_id / uid,
         Path("E:/gsuid_core/gsuid_core/plugins/miao-plugin/data") / folder / user_id / uid,
+    ]
+    return list(dict.fromkeys(roots))
+
+
+def _write_root(game: str, user_id: str, uid: str) -> Path:
+    folder = "srJson" if game == "sr" else "gachaJson"
+    return MAIN_PATH / folder / str(user_id or "") / str(uid or "")
+
+
+def _write_roots(game: str, user_id: str, uid: str) -> List[Path]:
+    folder = "srJson" if game == "sr" else "gachaJson"
+    roots = [
+        _write_root(game, user_id, uid),
+        _plugin_root() / "data" / folder / str(user_id or "") / str(uid or ""),
     ]
     return list(dict.fromkeys(roots))
 
@@ -109,6 +129,128 @@ def _read_pool_file(root: Path, pool: str) -> List[Dict[str, Any]]:
         if path.exists():
             return list(_iter_items(_load_json(path)))
     return []
+
+
+def _normalize_gacha_item(item: Dict[str, Any], game: str, pool: str = "") -> Dict[str, Any]:
+    ds = dict(item)
+    if pool and not ds.get("gacha_type"):
+        ds["gacha_type"] = str(pool)
+    if game == "sr" and ds.get("item_type") == "武器":
+        ds["item_type"] = "光锥"
+    ds.setdefault("name", str(ds.get("name") or ds.get("item_name") or ""))
+    ds.setdefault("time", str(ds.get("time") or ds.get("gacha_time") or ""))
+    if not ds.get("id"):
+        ds["id"] = str(ds.get("uid") or ds.get("gacha_id") or f"{ds.get('time', '')}-{ds.get('name', '')}")
+    return ds
+
+
+def _pool_from_item(item: Dict[str, Any], game: str) -> str:
+    raw = str(item.get("gacha_type") or item.get("uigf_gacha_type") or item.get("pool") or item.get("pool_id") or "").strip()
+    aliases = POOL_ALIASES_SR if game == "sr" else POOL_ALIASES_GS
+    if raw in aliases:
+        return aliases[raw]
+    item_type = str(item.get("item_type") or "")
+    if game == "sr":
+        return "12" if item_type == "光锥" else "11"
+    return "302" if item_type == "武器" else "301"
+
+
+def _extract_import_items(raw: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    if not isinstance(raw, dict):
+        return []
+    for key in ("list", "data", "items", "gachaLog"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            return [x for x in value if isinstance(x, dict)]
+        if isinstance(value, dict):
+            nested = _extract_import_items(value)
+            if nested:
+                return nested
+    return []
+
+
+def _save_imported_items(game: str, user_id: str, uid: str, items: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    roots = _write_roots(game, user_id, uid)
+    root = roots[0]
+    root.mkdir(parents=True, exist_ok=True)
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for item in items:
+        if isinstance(item, dict):
+            pool = _pool_from_item(item, game)
+            grouped[pool].append(_normalize_gacha_item(item, game, pool))
+    added = 0
+    total = 0
+    pools: Dict[str, int] = {}
+    for pool, new_items in grouped.items():
+        path = root / f"{pool}.json"
+        old_items = list(_iter_items(_load_json(path))) if path.exists() else []
+        seen = {str(x.get("id") or "") for x in old_items if isinstance(x, dict) and x.get("id")}
+        merged = list(old_items)
+        pool_added = 0
+        for item in new_items:
+            item_id = str(item.get("id") or "")
+            if item_id and item_id in seen:
+                continue
+            if item_id:
+                seen.add(item_id)
+            merged.append(item)
+            pool_added += 1
+        merged = _sort_items(merged)
+        content = json.dumps(merged, ensure_ascii=False, indent=2)
+        for target_root in roots:
+            try:
+                target_root.mkdir(parents=True, exist_ok=True)
+                (target_root / f"{pool}.json").write_text(content, encoding="utf-8")
+            except Exception:
+                continue
+        added += pool_added
+        total += len(merged)
+        pools[_pool_name(pool, game)] = len(merged)
+    return {"ok": True, "game": game, "uid": uid, "root": str(root), "added": added, "total": total, "pools": pools}
+
+
+def import_gacha_json(game: str, user_id: str, uid: str, raw: Any) -> Dict[str, Any]:
+    game = "sr" if game in {"sr", "starrail", "hkrpg"} else "gs"
+    items = _extract_import_items(raw)
+    if not items:
+        return {"ok": False, "message": "未识别到 UIGF/抽卡记录 JSON 列表"}
+    return _save_imported_items(game, user_id, uid, items)
+
+
+async def import_gacha_authkey(game: str, user_id: str, uid: str, url: str) -> Dict[str, Any]:
+    game = "sr" if game in {"sr", "starrail", "hkrpg"} else "gs"
+    pools = ["11", "12", "1"] if game == "sr" else ["301", "302", "200", "500"]
+    api_url = SR_GACHA_API_URL if game == "sr" else GACHA_API_URL
+    base_params = dict(httpx.URL(url).params)
+    if not base_params.get("authkey"):
+        return {"ok": False, "message": "链接中未找到 authkey，请发送游戏内祈愿/跃迁历史记录链接。"}
+    all_items: List[Dict[str, Any]] = []
+    async with httpx.AsyncClient(timeout=20.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
+        for pool in pools:
+            page = 1
+            end_id = "0"
+            while page <= 30:
+                params = dict(base_params)
+                params.update({"gacha_type": pool, "page": str(page), "size": "20", "end_id": end_id})
+                resp = await client.get(api_url, params=params)
+                data = resp.json()
+                if int(data.get("retcode") or 0) != 0:
+                    return {"ok": False, "message": str(data.get("message") or "接口返回失败，authkey 可能已过期")}
+                rows = (((data.get("data") or {}).get("list")) or [])
+                if not rows:
+                    break
+                for row in rows:
+                    if isinstance(row, dict):
+                        all_items.append(_normalize_gacha_item(row, game, pool))
+                end_id = str(rows[-1].get("id") or "0")
+                if len(rows) < 20:
+                    break
+                page += 1
+    if not all_items:
+        return {"ok": False, "message": "接口未返回抽卡记录，可能链接已过期或该 UID 暂无记录。"}
+    return _save_imported_items(game, user_id, uid, all_items)
 
 
 def _sort_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

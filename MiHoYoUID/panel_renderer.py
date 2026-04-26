@@ -2008,6 +2008,93 @@ async def render_artifact_list_image(result: PanelResult) -> bytes:
     return await convert_img(img)
 
 
+async def render_gacha_image(data: Dict[str, Any]) -> bytes:
+    game = str(data.get("game") or "gs")
+    is_sr = game == "sr"
+    uid = str(data.get("uid") or "-")
+    width = 980
+    pools = list(data.get("pools") or [])
+    recent = list(data.get("recent") or [])[:12]
+    error_lines: List[str] = []
+    if not data.get("ok"):
+        message = str(data.get("message") or "未找到本地抽卡记录 JSON")
+        searched = data.get("searched") or []
+        error_lines = [message]
+        if searched:
+            error_lines.append("可先发送 MM导入抽卡记录帮助，按提示导入 authkey 链接或 UIGF/JSON。")
+    row_h = 142
+    height = max(680, 230 + max(1, len(pools)) * row_h + (250 if recent else 90) + (90 if error_lines else 0))
+    img = _gradient_bg(width, height).convert("RGBA")
+    bg = _cover_image(_resource_path("common", "theme", "bg-01.jpg") or _resource_path("character", "imgs", "bg-01.jpg"), (width, height))
+    if bg:
+        bg.putalpha(92)
+        img.alpha_composite(bg)
+    img.alpha_composite(Image.new("RGBA", (width, height), (6, 12, 26, 118)))
+    draw = ImageDraw.Draw(img)
+    accent = (246, 199, 74) if is_sr else (84, 150, 255)
+    title = "*崩铁抽卡统计" if is_sr else "#原神抽卡统计"
+    title_text, title_font = _fit_font_text(draw, title, width - 280, [FONT_PROFILE_TITLE, _font(38, True, "NZBZ.ttf"), _font(34, True, "HYWH-65W.ttf")], 6)
+    _shadow_text(draw, (52, 38), title_text, (255, 247, 222), title_font)
+    desc = f"UID {uid} · 总计 {data.get('total', 0)} 抽 · {datetime.now().strftime('%m-%d %H:%M')}"
+    _shadow_text(draw, (56, 104), desc, (220, 228, 244), FONT_PROFILE_LABEL)
+    tag_box = (width - 204, 46, width - 54, 92)
+    draw.rounded_rectangle(tag_box, radius=17, fill=(*accent, 210), outline=(255, 245, 210, 130), width=1)
+    _center_text(draw, tag_box, "抽卡分析", (26, 28, 34), _font(18, True, "HYWH-65W.ttf"))
+
+    y = 168
+    if error_lines:
+        _draw_profile_list_card(draw, (52, y, width - 52, y + 154), (18, 33, 50), (84, 102, 136))
+        ty = y + 30
+        for line in error_lines:
+            wrapped = _wrap_text_full(draw, line, width - 150, FONT_TEXT)
+            for part in wrapped[:3]:
+                _text(draw, (82, ty), part, (248, 244, 232), FONT_TEXT)
+                ty += 32
+        y += 180
+    else:
+        for idx, pool in enumerate(pools, start=1):
+            yy = y + (idx - 1) * row_h
+            _draw_profile_list_card(draw, (46, yy, width - 46, yy + 118), (18, 33, 50), (84, 102, 136))
+            label = str(pool.get("label") or "卡池")
+            _text(draw, (72, yy + 18), label, (255, 232, 174), FONT_CARD_TITLE)
+            stats = [
+                ("总抽", pool.get("total", 0)),
+                ("五星", pool.get("five", 0)),
+                ("四星", pool.get("four", 0)),
+                ("平均", pool.get("avg_pity", 0)),
+                ("垫数", pool.get("current_pity", 0)),
+            ]
+            for s_idx, (name, value) in enumerate(stats):
+                sx = 76 + s_idx * 126
+                _text(draw, (sx, yy + 62), name, (160, 174, 198), FONT_TINY)
+                _text(draw, (sx, yy + 82), str(value), accent if s_idx in {1, 4} else (248, 244, 232), FONT_TEXT)
+            five_items = list(pool.get("five_items") or [])[:3]
+            five_text = " / ".join(f"{x.get('name', '未知')}({x.get('_pity', '-')})" for x in five_items) or "暂无五星记录"
+            five_text, five_font = _fit_font_text(draw, five_text, 250, [FONT_SMALL, FONT_TINY], 5)
+            _text(draw, (676, yy + 58), "最近五星", (160, 174, 198), FONT_TINY)
+            _text(draw, (676, yy + 82), five_text, (255, 232, 174), five_font)
+        y += max(1, len(pools)) * row_h
+
+    if recent:
+        _text(draw, (56, y + 6), "最近记录", (255, 232, 174), FONT_HELP_GROUP)
+        y += 52
+        for idx, item in enumerate(recent[:12], start=1):
+            col = (idx - 1) % 2
+            row = (idx - 1) // 2
+            x = 54 + col * 446
+            yy = y + row * 50
+            rank = int(item.get("_rank") or 0)
+            fill = (74, 55, 30) if rank >= 5 else (49, 38, 72) if rank == 4 else (28, 42, 62)
+            draw.rounded_rectangle((x, yy, x + 420, yy + 38), radius=12, fill=fill, outline=(92, 110, 146), width=1)
+            name = _fit_text(str(item.get("name") or "未知"), 12)
+            time_text = str(item.get("time") or "")[:16]
+            _text(draw, (x + 14, yy + 8), f"{idx}. {name}", (248, 244, 232), FONT_SMALL)
+            _text(draw, (x + 230, yy + 10), time_text, (180, 192, 214), FONT_TINY)
+    footer = "Created By Miao-Plugin & MiHoYoUID · 数据兼容 miao-plugin gachaJson/srJson"
+    _text(draw, (52, height - 46), footer, (150, 163, 190), FONT_TINY)
+    return await convert_img(img)
+
+
 def _rank_metric_value(row: Dict[str, Any], mode: str) -> float:
     key = {
         "mark": "artifact_score",
