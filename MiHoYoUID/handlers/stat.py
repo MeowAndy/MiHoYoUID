@@ -14,8 +14,6 @@ sv_stat = SV("GsCoreMiao统计")
 
 STAT_COMMANDS = (
     "原神角色持有率",
-    "崩铁角色持有率",
-    "星铁角色持有率",
     "角色命座统计",
     "角色5命统计",
     "深渊出场率",
@@ -36,9 +34,6 @@ STAT_COMMAND_PATTERN = "|".join(STAT_COMMANDS + PREFIXED_STAT_COMMANDS)
 
 
 def _kind_title(text: str) -> tuple[str, str]:
-    if "崩铁" in text or "星铁" in text:
-        if "持有" in text or "命座" in text or "5命" in text or "满命" in text:
-            return "sr_cons", "喵喵崩铁角色持有/星魂统计"
     if "组队" in text or "配队" in text:
         return "team", "喵喵深渊组队"
     if "幽境" in text or "危战" in text:
