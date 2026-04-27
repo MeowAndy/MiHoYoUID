@@ -86,6 +86,18 @@ def _damage_query_name(name: str, extra: str = "") -> str:
     return re.sub(r"\s+", " ", f"{name or ''} {extra or ''}").strip()
 
 
+def _split_profile_mode(raw_name: str, raw_mode: str = "", default_mode: str = "面板") -> tuple[str, str]:
+    name = (raw_name or "").strip()
+    mode = (raw_mode or "").strip()
+    if not mode:
+        for suffix in ("圣遗物", "遗器", "光锥", "伤害", "详细", "详情", "面版", "面板"):
+            if name.endswith(suffix) and len(name) > len(suffix):
+                name = name[:-len(suffix)].strip()
+                mode = suffix
+                break
+    return name, mode or default_mode
+
+
 def _remember_latest_panel(result) -> None:
     if result:
         set_latest_panel(result.uid, result, result.game)
@@ -345,8 +357,8 @@ async def send_sr_miao_style_profile(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
 
     data = ev.regex_dict or {}
-    name = _resolve_name_for_game(data.get("name") or "", game="sr")
-    mode = (data.get("mode") or "面板").strip()
+    raw_name, mode = _split_profile_mode(data.get("name") or "", data.get("mode") or "")
+    name = _resolve_name_for_game(raw_name, game="sr")
     uid = await _uid_from_event(ev, (data.get("uid") or "").strip() or _extract_uid_from_text(data.get("extra") or ""), game="sr")
     if not uid:
         return await bot.send(f"请携带 UID，例如：喵喵崩铁{name}{mode} 100000001\n也可先登录或绑定：喵喵登录 / 喵喵崩铁设置uid 100000001")
