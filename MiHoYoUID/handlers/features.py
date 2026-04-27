@@ -86,6 +86,14 @@ def _damage_query_name(name: str, extra: str = "") -> str:
     return re.sub(r"\s+", " ", f"{name or ''} {extra or ''}").strip()
 
 
+def _profile_raw_name(data: dict) -> str:
+    raw_name = (data.get("name") or "").strip()
+    if data.get("mode"):
+        return raw_name
+    extra = re.sub(r"\b\d{9,10}\b", " ", data.get("extra") or "").strip()
+    return re.sub(r"\s+", " ", f"{raw_name}{extra}").strip()
+
+
 def _split_profile_mode(raw_name: str, raw_mode: str = "", default_mode: str = "面板") -> tuple[str, str]:
     name = (raw_name or "").strip()
     mode = (raw_mode or "").strip()
@@ -250,6 +258,27 @@ async def send_artifact(bot: Bot, ev: Event):
         await bot.send(render_artifact_text(result, name))
 
 
+@sv_feature.on_regex(r"^崩铁(遗器评分|遗物评分|遗器|圣遗物)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
+async def send_sr_artifact(bot: Bot, ev: Event):
+    if not MiaoConfig.get_config("EnableArtifactScore").data:
+        return
+    if not can_use_plugin(ev):
+        return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
+    uid = ((ev.regex_dict or {}).get("uid") or "").strip()
+    uid = await _uid_from_event(ev, uid, game="sr")
+    if not uid:
+        return await bot.send("请携带 UID，例如：喵喵崩铁遗器评分 800000001 黄泉\n也可先登录或绑定：喵喵登录 / 喵喵崩铁设置uid 800000001")
+    name = _resolve_name_for_game((ev.regex_dict or {}).get("name") or "", game="sr")
+    result = await _query_user_panel(bot, ev, uid, game="sr")
+    if result:
+        if name:
+            try:
+                return await bot.send(await render_artifact_image(result, name))
+            except Exception as e:
+                return await bot.send(f"遗器详情图渲染失败，已回退文本评分：{e}\n\n{render_artifact_text(result, name)}")
+        await bot.send(render_artifact_text(result, name))
+
+
 @sv_feature.on_regex(r"^原神(伤害计算|伤害估算|伤害)\s*(?P<uid>\d{9,10})?\s*(?P<name>.*)$", block=True)
 async def send_damage(bot: Bot, ev: Event):
     if not MiaoConfig.get_config("EnableDamageCalc").data:
@@ -357,7 +386,7 @@ async def send_sr_miao_style_profile(bot: Bot, ev: Event):
         return await bot.send("当前配置禁止游客使用，仅管理员可调用该指令")
 
     data = ev.regex_dict or {}
-    raw_name, mode = _split_profile_mode(data.get("name") or "", data.get("mode") or "")
+    raw_name, mode = _split_profile_mode(_profile_raw_name(data), data.get("mode") or "")
     name = _resolve_name_for_game(raw_name, game="sr")
     uid = await _uid_from_event(ev, (data.get("uid") or "").strip() or _extract_uid_from_text(data.get("extra") or ""), game="sr")
     if not uid:
