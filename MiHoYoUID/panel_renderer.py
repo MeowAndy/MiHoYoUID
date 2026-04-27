@@ -302,6 +302,8 @@ FONT_PROFILE_NAME = _font(18, True, "HYWH-65W.ttf")
 FONT_PROFILE_CONS = _font(12, True, "HYWH-65W.ttf")
 FONT_PROFILE_CREDIT = _font(18, True, "NZBZ.ttf")
 FONT_ARTIFACT_RANK = _font(30, True, "NZBZ.ttf")
+FONT_SCORE_BADGE = _font(22, True, "NZBZ.ttf")
+FONT_SCORE_BADGE_SMALL = _font(18, True, "NZBZ.ttf")
 FONT_LIGHT_CONE_EFFECT = _font(13, False, "HYWH-65W.ttf")
 FONT_LIGHT_CONE_EFFECT_SMALL = _font(12, False, "HYWH-65W.ttf")
 FONT_LIGHT_CONE_EFFECT_TINY = _font(11, False, "HYWH-65W.ttf")
@@ -1674,17 +1676,43 @@ def _draw_section_title(draw: ImageDraw.ImageDraw, y: int, title: str, right: st
     else:
         _text(draw, (45, y + 10), title, (211, 188, 142), FONT_TEXT)
     if right:
-        score_box = (392, y + 6, 558, y + 38)
-        _rounded_r(draw, score_box, 10, (58, 45, 32), (232, 181, 90), 1)
-        score_text, score_font = _fit_font_text(draw, right, score_box[2] - score_box[0] - 22, [FONT_TEXT, FONT_SMALL, FONT_TINY], 6)
+        score_box = (374, y + 4, 560, y + 40)
+        _rounded_r(draw, score_box, 8, (18, 28, 38), (82, 222, 238), 1)
+        draw.line((score_box[0] + 12, score_box[1] + 3, score_box[2] - 12, score_box[1] + 3), fill=(255, 213, 105), width=1)
+        draw.line((score_box[0] + 12, score_box[3] - 3, score_box[2] - 12, score_box[3] - 3), fill=(38, 151, 177), width=1)
+        draw.polygon(
+            [
+                (score_box[0] + 4, score_box[1] + 11),
+                (score_box[0] + 12, score_box[1] + 4),
+                (score_box[0] + 22, score_box[1] + 4),
+            ],
+            fill=(255, 213, 105),
+        )
+        draw.polygon(
+            [
+                (score_box[2] - 4, score_box[3] - 11),
+                (score_box[2] - 12, score_box[3] - 4),
+                (score_box[2] - 22, score_box[3] - 4),
+            ],
+            fill=(82, 222, 238),
+        )
+        score_text, score_font = _fit_font_text(draw, right, score_box[2] - score_box[0] - 26, [FONT_SCORE_BADGE, FONT_SCORE_BADGE_SMALL, FONT_SMALL], 6)
         score_w = _text_width(draw, score_text, score_font)
+        text_x = score_box[0] + (score_box[2] - score_box[0] - score_w) // 2
         _shadow_text(
             draw,
-            (score_box[0] + (score_box[2] - score_box[0] - score_w) // 2, y + 10),
+            (text_x + 1, y + 8),
             score_text,
-            (255, 232, 170),
+            (113, 241, 255),
             score_font,
-            (30, 20, 12),
+            (0, 28, 36),
+        )
+        _text(
+            draw,
+            (text_x, y + 7),
+            score_text,
+            (255, 232, 155),
+            score_font,
         )
     return y + 54
 
