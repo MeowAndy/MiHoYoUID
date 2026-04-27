@@ -655,6 +655,61 @@ def _mys_prop_value(prop: Dict[str, Any]) -> Any:
     return prop.get("value_str") or prop.get("valueStr")
 
 
+def _first_dict(*values: Any) -> Dict[str, Any]:
+    for value in values:
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def _extract_mys_detail_avatars(data: Any) -> List[Dict[str, Any]]:
+    if not isinstance(data, dict):
+        return []
+    avatars = _avatars_from(data)
+    if avatars:
+        return avatars
+    inner = data.get("data")
+    return _avatars_from(inner) if isinstance(inner, dict) else []
+
+
+def _has_reliquary_props(rel: Dict[str, Any]) -> bool:
+    main_prop = rel.get("main_property") or rel.get("main_prop") or rel.get("main")
+    sub_props = rel.get("sub_property_list") or rel.get("sub_props") or rel.get("subProperties")
+    if isinstance(main_prop, dict) and main_prop:
+        return True
+    if isinstance(sub_props, list) and any(isinstance(x, dict) and x for x in sub_props):
+        return True
+    return False
+
+
+def _avatar_has_mys_detail(avatar: Dict[str, Any]) -> bool:
+    if not isinstance(avatar, dict):
+        return False
+    if _props_from_avatar(avatar):
+        return True
+    for key in ("selected_properties", "base_properties", "extra_properties", "properties"):
+        value = avatar.get(key)
+        if isinstance(value, list) and value:
+            return True
+    for key in ("relics", "reliquaries", "artifacts", "relic_list", "relicList"):
+        value = avatar.get(key)
+        if isinstance(value, list) and any(isinstance(x, dict) and _has_reliquary_props(x) for x in value):
+            return True
+    return False
+
+
+def _panel_has_mys_detail(result: PanelResult) -> bool:
+    for char in result.characters or []:
+        if not isinstance(char, dict):
+            continue
+        if char.get("fight_props"):
+            return True
+        for rel in char.get("reliquaries") or []:
+            if isinstance(rel, dict) and (rel.get("main_prop") or rel.get("sub_props")):
+                return True
+    return False
+
+
 def _mys_fight_props(avatar: Dict[str, Any]) -> Dict[str, Any]:
     props = _props_from_avatar(avatar)
     for key in ("selected_properties", "base_properties", "extra_properties", "properties"):
@@ -685,7 +740,7 @@ def _mys_skill_levels(avatar: Dict[str, Any]) -> List[int]:
 
 def _mys_reliquaries(avatar: Dict[str, Any]) -> List[Dict[str, Any]]:
     reliqs: List[Dict[str, Any]] = []
-    for item in avatar.get("relics") or avatar.get("reliquaries") or []:
+    for item in avatar.get("relics") or avatar.get("reliquaries") or avatar.get("artifacts") or avatar.get("relic_list") or avatar.get("relicList") or []:
         if not isinstance(item, dict):
             continue
         main_prop = item.get("main_property") or item.get("main_prop") or item.get("main")
@@ -1111,9 +1166,10 @@ class MysPanelSource(BasePanelSource):
             detail_data = detail_ret
 
         data = deepcopy(index_data)
-        if isinstance(detail_data.get("list"), list):
-            data["avatars"] = detail_data["list"]
-        return PanelResult(
+        detail_avatars = _extract_mys_detail_avatars(detail_data)
+        if detail_avatars:
+            data["avatars"] = detail_avatars
+        result = PanelResult(
             source=self.source_name,
             uid=uid,
             raw={"index": {"retcode": 0, "data": index_data}, "detail": {"retcode": 0, "data": detail_data}},
@@ -1124,6 +1180,65 @@ class MysPanelSource(BasePanelSource):
             characters=_characters_from_mys_avatars(data.get("avatars") or [], "gs"),
             game="gs",
         )
+        if character_ids and not any(_avatar_has_mys_detail(x) for x in detail_avatars):
+            raise PanelSourceError(self.source_name, "米游社角色详情缺少属性/圣遗物数据")
+        return result
+
+    async def _fetch_with_record_api(self, uid: str, cookie: str) -> PanelResult:
+        base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
+        server = _server_id(uid)
+        index_params = {"role_id": uid, "server": server}
+        index_q = urlencode(index_params)
+        index_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/index")
+        try:
+            async with httpx.AsyncClient(timeout=_timeout()) as client:
+                index_raw = await self._get_json_with_retry(
+                    client,
+                    index_url,
+                    index_params,
+                    _mys_headers(cookie, index_q),
+                    index_q,
+                )
+
+                index_data = index_raw.get("data") if isinstance(index_raw.get("data"), dict) else {}
+                avatars = index_data.get("avatars") if isinstance(index_data, dict) else []
+                character_ids = [x.get("id") for x in avatars if isinstance(x, dict) and x.get("id")]
+                detail_raw: Dict[str, Any] = {}
+                if character_ids:
+                    detail_body = {"character_ids": character_ids, "role_id": uid, "server": server}
+                    detail_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/list")
+                    detail_raw = await self._post_json_with_retry(
+                        client,
+                        detail_url,
+                        detail_body,
+                        _mys_headers(cookie, "", detail_body),
+                    )
+
+                raw = {"index": index_raw, "detail": detail_raw}
+        except httpx.HTTPStatusError as e:
+            raise PanelSourceError(self.source_name, _http_error_message(self.source_name, e)) from e
+        except Exception as e:
+            raise PanelSourceError(self.source_name, f"米游社请求失败：{e}") from e
+
+        detail_data = detail_raw.get("data") if isinstance(detail_raw.get("data"), dict) else detail_raw
+        data = deepcopy(index_data)
+        detail_avatars = _extract_mys_detail_avatars(detail_data)
+        if detail_avatars:
+            data["avatars"] = detail_avatars
+        result = PanelResult(
+            source=self.source_name,
+            uid=uid,
+            raw=raw,
+            nickname=str((data.get("role") or {}).get("nickname") or ""),
+            level=(data.get("role") or {}).get("level"),
+            signature="",
+            avatars=data.get("avatars") or [],
+            characters=_characters_from_mys_avatars(data.get("avatars") or [], "gs"),
+            game="gs",
+        )
+        if character_ids and not _panel_has_mys_detail(result):
+            raise PanelSourceError(self.source_name, "米游社角色详情缺少属性/圣遗物数据")
+        return result
 
     async def _fetch_starrail_avatar_info(self, uid: str, cookie: str) -> PanelResult:
         base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
@@ -1194,9 +1309,11 @@ class MysPanelSource(BasePanelSource):
     async def fetch(self, uid: str) -> PanelResult:
         cached = get_cached_panel(_cache_key(self.source_name, self.game), uid)
         if cached:
-            return cached
+            if self.game == "gs" and not _panel_has_mys_detail(cached):
+                cached = None
+            else:
+                return cached
 
-        base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
         cookie = self.cookie or str(MiaoConfig.get_config("MysCookie").data or "").strip()
         if not cookie:
             raise PanelSourceError(self.source_name, "米游社 Cookie 未配置")
@@ -1204,65 +1321,27 @@ class MysPanelSource(BasePanelSource):
         if self.game == "sr":
             return await self._fetch_starrail_avatar_info(uid, cookie)
 
+        gscore_error: PanelSourceError | None = None
         try:
             result = await self._fetch_with_gscore_api(uid, cookie)
-            set_cached_panel(_cache_key(self.source_name, self.game), uid, result)
-            return result
-        except PanelSourceError:
-            raise
+            if _panel_has_mys_detail(result):
+                set_cached_panel(_cache_key(self.source_name, self.game), uid, result)
+                return result
+            gscore_error = PanelSourceError(self.source_name, "米游社角色详情缺少属性/圣遗物数据")
+        except PanelSourceError as e:
+            gscore_error = e
         except Exception as e:
-            raise PanelSourceError(self.source_name, f"米游社请求失败：{e}") from e
+            gscore_error = PanelSourceError(self.source_name, f"米游社请求失败：{e}")
 
-        server = _server_id(uid)
-        index_params = {"role_id": uid, "server": server}
-        index_q = urlencode(index_params)
-        index_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/index")
         try:
-            async with httpx.AsyncClient(timeout=_timeout()) as client:
-                index_raw = await self._get_json_with_retry(
-                    client,
-                    index_url,
-                    index_params,
-                    _mys_headers(cookie, index_q),
-                    index_q,
-                )
-
-                index_data = index_raw.get("data") if isinstance(index_raw.get("data"), dict) else {}
-                avatars = index_data.get("avatars") if isinstance(index_data, dict) else []
-                character_ids = [x.get("id") for x in avatars if isinstance(x, dict) and x.get("id")]
-                detail_raw: Dict[str, Any] = {}
-                if character_ids:
-                    detail_body = {"character_ids": character_ids, "role_id": uid, "server": server}
-                    detail_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/list")
-                    detail_raw = await self._post_json_with_retry(
-                        client,
-                        detail_url,
-                        detail_body,
-                        _mys_headers(cookie, "", detail_body),
-                    )
-
-                raw = {"index": index_raw, "detail": detail_raw}
-        except httpx.HTTPStatusError as e:
-            raise PanelSourceError(self.source_name, _http_error_message(self.source_name, e)) from e
-        except Exception as e:
-            raise PanelSourceError(self.source_name, f"米游社请求失败：{e}") from e
-
-        detail_data = detail_raw.get("data") if isinstance(detail_raw.get("data"), dict) else {}
-        data = deepcopy(index_data)
-        if isinstance(detail_data, dict) and isinstance(detail_data.get("list"), list):
-            data["avatars"] = detail_data["list"]
-        result = PanelResult(
-            source=self.source_name,
-            uid=uid,
-            raw=raw,
-            nickname=str((data.get("role") or {}).get("nickname") or ""),
-            level=(data.get("role") or {}).get("level"),
-            signature="",
-            avatars=data.get("avatars") or [],
-            characters=_characters_from_mys_avatars(data.get("avatars") or [], "gs"),
-            game="gs",
-        )
-        set_cached_panel(self.source_name, uid, result)
+            result = await self._fetch_with_record_api(uid, cookie)
+        except PanelSourceError as e:
+            if gscore_error and "缺少属性/圣遗物数据" not in str(e):
+                raise e
+            if gscore_error:
+                raise gscore_error
+            raise
+        set_cached_panel(_cache_key(self.source_name, self.game), uid, result)
         return result
 
 
