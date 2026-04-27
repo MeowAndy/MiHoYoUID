@@ -79,57 +79,72 @@
 
 ### ⚙️ WebUI 配置项（GsCore 网页控制台）
 
-  - EnableHelp
-  - EnableVersion
-  - EnableMiaoSetting
-  - CommandPrefix
-  - HelpTitle
-  - HelpSubTitle
-  - HelpRenderMode
-  - AllowedPanelServers
-  - DefaultPanelServer
-  - PanelSourcePriority
-  - PanelRequestTimeout
-  - EnablePanelQuery
-  - EnableAliasQuery
-  - EnableArtifactScore
-  - EnableDamageCalc
-  - EnableMysLogin
-  - EnableMysQrLogin
-  - EnableDailySign
-  - EnableAutoDailySign
-  - AutoDailySignTime
-  - PrivateSignReport
-  - GroupSignReport
-  - LoginHelpUrl
-  - EnablePanelFallback
-  - MiaoApiBaseUrl
-  - MiaoApiQQ
-  - MiaoApiToken
-  - MiaoApiGame
-  - EnkaApiBaseUrl
-  - EnkaLocale
-  - MysApiBaseUrl
-  - MysCookie
-  - MysDeviceId
-  - MysDeviceFp
-  - MysAppVersion
-  - MysClientType
-  - MysDsSalt
-  - MggApiBaseUrl
-  - HutaoApiBaseUrl
-  - MihomoApiBaseUrl
-  - AvocadoApiBaseUrl
-  - EnkaHSRApiBaseUrl
-  - MiaoPluginResourcePath
-  - PanelCacheTTL
-  - PanelRenderMode
-  - AllowGuestUse
-  - RecentHistoryLimit
-  - UpdateLogLimit
-  - EnableSettingExport
-  - EnableSettingReset
-  - MaxCommaGroup
+这些配置可在 GsCore 网页控制台中修改；每项旁边的说明用于帮助部署者判断是否需要调整。
+
+- `EnableHelp`：是否启用帮助/菜单入口，关闭后不响应原神、崩铁帮助命令。
+- `EnableVersion`：是否启用版本查询，关闭后不响应原神版本命令。
+- `EnableMiaoSetting`：是否启用 `喵喵原神设置`，用于查看和修改用户侧插件设置。
+- `CommandPrefix`：帮助页和提示中展示的中文命令前缀，默认 `喵喵`。
+- `HelpTitle`：帮助图片或帮助文本的主标题。
+- `HelpSubTitle`：帮助图片或帮助文本的副标题。
+- `HelpRenderMode`：帮助输出方式，`image` 为图片卡片，`text` 为纯文本。
+- `AllowedPanelServers`：允许用户选择的面板数据源列表。
+- `DefaultPanelServer`：用户未单独设置时使用的默认面板数据源。
+- `PanelSourcePriority`：`auto` 模式下的面板数据源尝试顺序。
+- `PanelRequestTimeout`：请求第三方面板接口的超时时间，单位为秒。
+- `EnablePanelQuery`：是否启用原神/崩铁面板查询、更新和删除等面板命令。
+- `EnableAliasQuery`：是否启用角色别名查询命令。
+- `EnableArtifactScore`：是否启用原神圣遗物评分与崩铁遗器评分。
+- `EnableDamageCalc`：是否启用原神/崩铁伤害计算和角色伤害命令。
+- `EnableWikiQuery`：是否启用角色资料、天赋/技能、命座/星魂、材料/养成等图鉴命令。
+- `EnableMaterialCalendar`：是否启用今日素材、明日材料、周几素材等原神素材日历命令。
+- `EnableActivityCalendar`：是否启用原神日历、原神活动、崩铁日历、星铁活动等公告日历命令。
+- `EnableGachaStat`：是否启用原神/崩铁抽卡记录导入、抽卡统计和卡池分析。
+- `EnablePublicStat`：是否启用角色持有率、命座统计、深渊统计、幽境危战公开统计等公开统计命令。
+- `EnablePersonalChallengeStat`：是否启用需要用户绑定 CK 的幻想真境剧诗数据、幽境危战数据等个人挑战统计。
+- `EnableMysLogin`：是否允许用户通过 Cookie 登录并保存米游社账号信息。
+- `EnableMysQrLogin`：是否允许用户通过米游社 App 扫码登录。
+- `EnableDailySign`：是否允许已登录用户执行原神/崩铁每日签到。
+- `EnableAutoDailySign`：是否启用每日自动签到定时任务。
+- `AutoDailySignTime`：自动签到执行时间，格式为 `[小时, 分钟]`，默认 `[0, 30]` 表示 00:30。
+- `PrivateSignReport`：是否向私聊订阅者推送自动/全部签到统计报告。
+- `GroupSignReport`：是否向群聊订阅者推送自动/全部签到统计报告。
+- `LoginHelpUrl`：用户执行登录但未携带 Cookie 时展示的教程链接或提示文本。
+- `EnablePanelFallback`：当前面板数据源失败时，是否继续尝试下一个可用数据源。
+- `MiaoApiBaseUrl`：Miao 面板接口基础地址，默认 `http://miao.games`。
+- `MiaoApiQQ`：Miao API Token 绑定的机器人 QQ，未配置时按空值处理。
+- `MiaoApiToken`：Miao API 鉴权 Token，没有 Token 可留空跳过。
+- `MiaoApiGame`：请求 Miao API 时携带的游戏类型，通常为 `gs` 或 `sr`。
+- `EnkaApiBaseUrl`：Enka Network 原神面板接口基础地址。
+- `EnkaLocale`：请求 Enka 原神数据时使用的语言参数。
+- `MysApiBaseUrl`：米游社记录接口基础地址，用于面板刷新和个人挑战统计等记录接口。
+- `MysCookie`：全局米游社 Cookie，用于服务端查询授权数据；普通部署可留空。
+- `MysDeviceId`：米游社请求设备 ID，留空时使用内置生成逻辑或默认行为。
+- `MysDeviceFp`：米游社风控设备指纹，留空时不主动携带。
+- `MysAppVersion`：米游社请求头中的 App 版本号，需与签名算法保持兼容。
+- `MysClientType`：米游社请求头中的客户端类型，国内米游社默认 `5`。
+- `MysDsSalt`：米游社 DS 签名盐，留空使用插件内置值，接口变更时可覆盖。
+- `GenshinCalendarApiUrl`：原神活动/祈愿公告列表接口，用于原神日历和原神活动。
+- `StarRailCalendarApiUrl`：崩铁/星铁活动与跃迁公告列表接口，用于崩铁日历和星铁活动。
+- `StatYshelperApiUrl`：yshelper 深渊公开统计接口，用于深渊出场率、使用率、配队和深渊数据。
+- `StatLelaerRoleApiUrl`：lelaer 角色持有率/命座统计接口，用于持有率、命座和 5 命统计。
+- `StatLelaerHardApiUrl`：lelaer 幽境危战公开统计接口，用于幽境危战出场率和使用率。
+- `GenshinGachaApiUrl`：原神祈愿历史 `getGachaLog` 接口，用于通过 authkey 导入原神抽卡记录。
+- `StarRailGachaApiUrl`：崩铁跃迁历史 `getGachaLog` 接口，用于通过 authkey 导入崩铁抽卡记录。
+- `MggApiBaseUrl`：MiniGG 原神面板数据源基础地址。
+- `HutaoApiBaseUrl`：胡桃 Enka 代理面板数据源基础地址。
+- `MihomoApiBaseUrl`：Mihomo 星铁面板数据源基础地址。
+- `AvocadoApiBaseUrl`：Avocado 星铁面板数据源基础地址。
+- `EnkaHSRApiBaseUrl`：Enka Network 星铁面板数据源基础地址。
+- `MiaoPluginResourcePath`：本地 Yunzai `miao-plugin` 资源目录，可用于复用立绘、头像、图标等素材。
+- `PanelCacheTTL`：同一 UID 面板数据缓存时间，单位为秒，填 `0` 表示不缓存。
+- `PanelRenderMode`：面板输出方式，`image` 为图片卡片，`text` 为文本摘要。
+- `AllowGuestUse`：是否允许非管理员用户调用插件命令，关闭后仅管理员可用。
+- `RecentHistoryLimit`：每个用户保留的最近 UID/操作历史数量上限。
+- `UpdateLogLimit`：更新日志命令每次展示的记录数量上限。
+- `EnableSettingExport`：是否允许用户通过命令导出个人设置 JSON。
+- `EnableSettingReset`：是否允许用户通过命令重置个人设置。
+- `MaxCommaGroup`：`喵喵原神设置逗号` 允许设置的最大数字分组值。
 
 ## 📁 目录
 
