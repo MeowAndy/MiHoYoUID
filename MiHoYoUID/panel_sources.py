@@ -855,11 +855,31 @@ def _md5(text: str) -> str:
     return hashlib.md5(text.encode()).hexdigest()
 
 
+def _compact_json(data: Dict[str, Any]) -> str:
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+
+
+def _miao_device(uid: str) -> str:
+    return f"Yz-{_md5(str(uid))[:5]}"
+
+
+def _miao_seed(length: int = 16) -> str:
+    return "".join(random.choice("0123456789abcdef") for _ in range(length))
+
+
 def _mys_ds(q: str = "", b: Optional[Dict[str, Any]] = None) -> str:
     salt = str(MiaoConfig.get_config("MysDsSalt").data or "xV8v4Qu54lUKrEYFZkJhB8cuOh9Asafs")
-    body = json.dumps(b) if b else ""
+    body = _compact_json(b) if b else ""
     t = str(int(time.time()))
     r = str(random.randint(100000, 200000))
+    c = _md5(f"salt={salt}&t={t}&r={r}&b={body}&q={q}")
+    return f"{t},{r},{c}"
+
+
+def _miao_ds(q: str = "", body: str = "") -> str:
+    salt = str(MiaoConfig.get_config("MysDsSalt").data or "xV8v4Qu54lUKrEYFZkJhB8cuOh9Asafs")
+    t = str(int(time.time()))
+    r = str(random.randint(100000, 999999))
     c = _md5(f"salt={salt}&t={t}&r={r}&b={body}&q={q}")
     return f"{t},{r},{c}"
 
@@ -900,6 +920,65 @@ def _mys_headers(cookie: str, q: str = "", b: Optional[Dict[str, Any]] = None) -
     if device_fp:
         headers["x-rpc-device_fp"] = device_fp
     return headers
+
+
+def _miao_headers(cookie: str, uid: str, q: str = "", body: str = "", device_fp: str = "") -> Dict[str, str]:
+    # Miao-Yunzai runtime 的 MysApi.getHeaders：国内米游社固定 2.40.1 / client_type 5，
+    # User-Agent 里的设备为 Yz-${md5(uid).substring(0, 5)}，DS 直接对 JSON.stringify(body) 后的字符串签名。
+    device = _miao_device(uid)
+    headers = {
+        "x-rpc-app_version": "2.40.1",
+        "x-rpc-client_type": "5",
+        "User-Agent": (
+            f"Mozilla/5.0 (Linux; Android 12; {device})"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.73 "
+            "Mobile Safari/537.36 miHoYoBBS/2.40.1"
+        ),
+        "Referer": "https://webstatic.mihoyo.com/",
+        "Origin": "https://webstatic.mihoyo.com",
+        "X-Requested-With": "com.mihoyo.hyperion",
+        "DS": _miao_ds(q, body),
+        "Cookie": cookie,
+    }
+    if device_fp:
+        headers["x-rpc-device_fp"] = device_fp
+    return headers
+
+
+def _miao_get_fp_body(uid: str) -> Dict[str, Any]:
+    device = _miao_device(uid).upper()
+    return {
+        "seed_id": _miao_seed(16),
+        "device_id": device,
+        "platform": "1",
+        "seed_time": str(int(time.time() * 1000)),
+        "ext_fields": _compact_json(
+            {
+                "proxyStatus": "0",
+                "accelerometer": "-0.159515x-0.830887x-0.682495",
+                "ramCapacity": "3746",
+                "IDFV": device,
+                "gyroscope": "-0.191951x-0.112927x0.632637",
+                "isJailBreak": "0",
+                "model": "iPhone12,5",
+                "ramRemain": "115",
+                "chargeStatus": "1",
+                "networkType": "WIFI",
+                "vendor": "--",
+                "osVersion": "17.0.2",
+                "batteryStatus": "50",
+                "screenSize": "414×896",
+                "cpuCores": "6",
+                "appMemory": "55",
+                "romCapacity": "488153",
+                "romRemain": "157348",
+                "cpuType": "CPU_TYPE_ARM64",
+                "magnetometer": "-84.426331x-89.708435x-37.117889",
+            }
+        ),
+        "app_name": "bbs_cn",
+        "device_fp": "38d7ee834d1e9",
+    }
 
 
 async def _fill_gscore_device_headers(headers: Dict[str, str], uid: str, game: str = "gs") -> Dict[str, str]:
@@ -1317,12 +1396,14 @@ class MysPanelSource(BasePanelSource):
         list_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/list")
         try:
             async with httpx.AsyncClient(timeout=_mys_timeout()) as client:
-                list_headers = await _fill_gscore_device_headers(_mys_headers(cookie, "", list_body), uid, "gs")
-                list_raw = await self._post_json_with_retry(
+                device_fp = await self._get_miao_device_fp(client, uid, cookie)
+                list_raw = await self._post_miao_json_with_retry(
                     client,
                     list_url,
                     list_body,
-                    list_headers,
+                    cookie,
+                    uid,
+                    device_fp,
                 )
 
                 list_data = list_raw.get("data") if isinstance(list_raw.get("data"), dict) else {}
@@ -1332,12 +1413,13 @@ class MysPanelSource(BasePanelSource):
                 if character_ids:
                     detail_body = {"character_ids": character_ids, "role_id": uid, "server": server}
                     detail_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/detail")
-                    detail_headers = await _fill_gscore_device_headers(_mys_headers(cookie, "", detail_body), uid, "gs")
-                    detail_raw = await self._post_json_with_retry(
+                    detail_raw = await self._post_miao_json_with_retry(
                         client,
                         detail_url,
                         detail_body,
-                        detail_headers,
+                        cookie,
+                        uid,
+                        device_fp,
                     )
 
                 raw = {"character": list_raw, "characterDetail": detail_raw}
@@ -1373,8 +1455,8 @@ class MysPanelSource(BasePanelSource):
         url = urljoin(f"{base_url}/", "game_record/app/hkrpg/api/avatar/info")
         try:
             async with httpx.AsyncClient(timeout=_mys_timeout()) as client:
-                headers = await _fill_gscore_device_headers(_mys_headers(cookie, q), uid, "sr")
-                raw = await self._get_json_with_retry(client, url, params, headers, q)
+                device_fp = await self._get_miao_device_fp(client, uid, cookie)
+                raw = await self._get_miao_json_with_retry(client, url, params, cookie, uid, device_fp)
         except httpx.HTTPStatusError as e:
             raise PanelSourceError(self.source_name, _http_error_message(self.source_name, e)) from e
         except Exception as e:
@@ -1397,6 +1479,78 @@ class MysPanelSource(BasePanelSource):
         )
         set_cached_panel(_cache_key(self.source_name, "sr"), uid, result)
         return result
+
+    async def _get_miao_device_fp(self, client: httpx.AsyncClient, uid: str, cookie: str) -> str:
+        configured_fp = str(MiaoConfig.get_config("MysDeviceFp").data or "").strip()
+        if configured_fp:
+            return configured_fp
+        body = _miao_get_fp_body(uid)
+        body_text = _compact_json(body)
+        try:
+            resp = await self._request_json_with_timeout_retry(
+                client,
+                "POST",
+                "https://public-data-api.mihoyo.com/device-fp/api/getFp",
+                content=body_text.encode("utf-8"),
+                headers={**_miao_headers(cookie, uid, "", body_text), "Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            raw = _as_dict(resp.json())
+            data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+            fp = data.get("device_fp") if isinstance(data, dict) else ""
+            if fp:
+                return str(fp)
+        except Exception:
+            pass
+        try:
+            return str(await mys_api.get_user_fp(uid, self.game) or "")
+        except Exception:
+            return ""
+
+    async def _get_miao_json_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        params: Dict[str, Any],
+        cookie: str,
+        uid: str,
+        device_fp: str,
+    ) -> Dict[str, Any]:
+        q = _mys_query(params)
+        headers = _miao_headers(cookie, uid, q, "", device_fp)
+        resp = await self._request_json_with_timeout_retry(client, "GET", url, params=params, headers=headers)
+        resp.raise_for_status()
+        raw = _as_dict(resp.json())
+        if _is_mys_dead_code(raw):
+            retry_q = _mys_query(params, sort_keys=True)
+            retry_headers = _add_mys_challenge_headers(_miao_headers(cookie, uid, retry_q, "", device_fp), retry_q, game=self.game)
+            resp = await self._request_json_with_timeout_retry(client, "GET", url, params=params, headers=retry_headers)
+            resp.raise_for_status()
+            raw = _as_dict(resp.json())
+        _check_retcode(self.source_name, raw)
+        return raw
+
+    async def _post_miao_json_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        body: Dict[str, Any],
+        cookie: str,
+        uid: str,
+        device_fp: str,
+    ) -> Dict[str, Any]:
+        body_text = _compact_json(body)
+        headers = {**_miao_headers(cookie, uid, "", body_text, device_fp), "Content-Type": "application/json"}
+        resp = await self._request_json_with_timeout_retry(client, "POST", url, content=body_text.encode("utf-8"), headers=headers)
+        resp.raise_for_status()
+        raw = _as_dict(resp.json())
+        if _is_mys_dead_code(raw):
+            retry_headers = {**_add_mys_challenge_headers(headers, "", body, self.game), "Content-Type": "application/json"}
+            resp = await self._request_json_with_timeout_retry(client, "POST", url, content=body_text.encode("utf-8"), headers=retry_headers)
+            resp.raise_for_status()
+            raw = _as_dict(resp.json())
+        _check_retcode(self.source_name, raw)
+        return raw
 
     async def _get_json_with_retry(
         self,
@@ -1478,9 +1632,7 @@ class MysPanelSource(BasePanelSource):
         if self.game == "sr":
             try:
                 return await self._fetch_starrail_with_gscore_api(uid, cookie)
-            except PanelSourceError as e:
-                if "风控验证失败" in str(e):
-                    raise
+            except PanelSourceError:
                 return await self._fetch_starrail_avatar_info(uid, cookie)
 
         gscore_error: PanelSourceError | None = None
