@@ -840,6 +840,8 @@ def _starrail_server_id(uid: str) -> str:
 
 
 MYS_API_BASE_URL = "https://api-takumi-record.mihoyo.com"
+MYS_GENSHIN_CHARACTER_LIST_URL = f"{MYS_API_BASE_URL}/game_record/app/genshin/api/character/list"
+MYS_GENSHIN_CHARACTER_DETAIL_URL = f"{MYS_API_BASE_URL}/game_record/app/genshin/api/character/detail"
 MYS_STARRAIL_AVATAR_INFO_URL = f"{MYS_API_BASE_URL}/game_record/app/hkrpg/api/avatar/info"
 
 
@@ -1215,24 +1217,35 @@ class MysPanelSource(BasePanelSource):
 
     async def _fetch_with_gscore_api(self, uid: str, cookie: str) -> PanelResult:
         gs_mys = _gscore_mys_client("gs")
-        index_raw = await gs_mys.simple_mys_req("PLAYER_INFO_URL", uid, cookie=cookie, game_name="gs")
-        if not isinstance(index_raw, dict):
-            raise PanelSourceError(self.source_name, _mys_code_message(index_raw))
-        index_data = index_raw.get("data") if isinstance(index_raw.get("data"), dict) else {}
-        if not isinstance(index_data, dict):
+        server = _server_id(uid)
+        list_header = deepcopy(gs_mys._HEADER)
+        list_header["Cookie"] = cookie
+        list_body = {"role_id": uid, "server": server}
+        list_header["DS"] = _mys_ds("", list_body)
+        list_raw = await gs_mys._mys_request(
+            MYS_GENSHIN_CHARACTER_LIST_URL,
+            "POST",
+            list_header,
+            data=list_body,
+            game_name="gs",
+            time_out=int(max(_timeout(), 30.0)),
+        )
+        if not isinstance(list_raw, dict):
+            raise PanelSourceError(self.source_name, _mys_code_message(list_raw))
+        list_data = list_raw.get("data") if isinstance(list_raw.get("data"), dict) else {}
+        if not isinstance(list_data, dict):
             raise PanelSourceError(self.source_name, "米游社角色列表返回异常")
 
-        avatars = index_data.get("avatars") if isinstance(index_data, dict) else []
-        character_ids = [x.get("id") for x in avatars if isinstance(x, dict) and x.get("id")]
+        character_list = list_data.get("list") or list_data.get("avatars") or []
+        character_ids = [x.get("id") for x in character_list if isinstance(x, dict) and x.get("id")]
         detail_data: Dict[str, Any] = {}
         detail_raw: Dict[str, Any] = {}
         if character_ids:
-            server = _server_id(uid)
             detail_header = deepcopy(gs_mys._HEADER)
             detail_header["Cookie"] = cookie
             detail_header["DS"] = _mys_ds("", {"character_ids": character_ids, "role_id": uid, "server": server})
             detail_raw_ret = await gs_mys._mys_request(
-                gs_mys.MAPI["PLAYER_DETAIL_INFO_URL"],
+                MYS_GENSHIN_CHARACTER_DETAIL_URL,
                 "POST",
                 detail_header,
                 data={"character_ids": character_ids, "role_id": uid, "server": server},
@@ -1244,14 +1257,14 @@ class MysPanelSource(BasePanelSource):
             detail_raw = detail_raw_ret
             detail_data = detail_raw.get("data") if isinstance(detail_raw.get("data"), dict) else {}
 
-        data = deepcopy(index_data)
+        data = deepcopy(list_data)
         detail_avatars = _extract_mys_detail_avatars(detail_data)
         if detail_avatars:
             data["avatars"] = detail_avatars
         result = PanelResult(
             source=self.source_name,
             uid=uid,
-            raw={"index": index_raw, "detail": detail_raw},
+            raw={"character": list_raw, "characterDetail": detail_raw},
             nickname=str((data.get("role") or {}).get("nickname") or ""),
             level=(data.get("role") or {}).get("level"),
             signature="",
@@ -1265,7 +1278,7 @@ class MysPanelSource(BasePanelSource):
 
     async def _fetch_starrail_with_gscore_api(self, uid: str, cookie: str) -> PanelResult:
         gs_mys = _gscore_mys_client("sr")
-        params = {"role_id": uid, "server": _starrail_server_id(uid)}
+        params = {"need_wiki": "true", "role_id": uid, "server": _starrail_server_id(uid)}
         header = deepcopy(gs_mys._HEADER)
         header["Cookie"] = cookie
         header["DS"] = _mys_ds(_mys_query(params))
@@ -1300,27 +1313,25 @@ class MysPanelSource(BasePanelSource):
     async def _fetch_with_record_api(self, uid: str, cookie: str) -> PanelResult:
         base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
         server = _server_id(uid)
-        index_params = {"role_id": uid, "server": server}
-        index_q = _mys_query(index_params)
-        index_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/index")
+        list_body = {"role_id": uid, "server": server}
+        list_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/list")
         try:
             async with httpx.AsyncClient(timeout=_mys_timeout()) as client:
-                index_headers = await _fill_gscore_device_headers(_mys_headers(cookie, index_q), uid, "gs")
-                index_raw = await self._get_json_with_retry(
+                list_headers = await _fill_gscore_device_headers(_mys_headers(cookie, "", list_body), uid, "gs")
+                list_raw = await self._post_json_with_retry(
                     client,
-                    index_url,
-                    index_params,
-                    index_headers,
-                    index_q,
+                    list_url,
+                    list_body,
+                    list_headers,
                 )
 
-                index_data = index_raw.get("data") if isinstance(index_raw.get("data"), dict) else {}
-                avatars = index_data.get("avatars") if isinstance(index_data, dict) else []
-                character_ids = [x.get("id") for x in avatars if isinstance(x, dict) and x.get("id")]
+                list_data = list_raw.get("data") if isinstance(list_raw.get("data"), dict) else {}
+                character_list = list_data.get("list") or list_data.get("avatars") or []
+                character_ids = [x.get("id") for x in character_list if isinstance(x, dict) and x.get("id")]
                 detail_raw: Dict[str, Any] = {}
                 if character_ids:
                     detail_body = {"character_ids": character_ids, "role_id": uid, "server": server}
-                    detail_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/list")
+                    detail_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/detail")
                     detail_headers = await _fill_gscore_device_headers(_mys_headers(cookie, "", detail_body), uid, "gs")
                     detail_raw = await self._post_json_with_retry(
                         client,
@@ -1329,14 +1340,14 @@ class MysPanelSource(BasePanelSource):
                         detail_headers,
                     )
 
-                raw = {"index": index_raw, "detail": detail_raw}
+                raw = {"character": list_raw, "characterDetail": detail_raw}
         except httpx.HTTPStatusError as e:
             raise PanelSourceError(self.source_name, _http_error_message(self.source_name, e)) from e
         except Exception as e:
             raise PanelSourceError(self.source_name, f"米游社请求失败：{_exception_message(e)}") from e
 
         detail_data = detail_raw.get("data") if isinstance(detail_raw.get("data"), dict) else detail_raw
-        data = deepcopy(index_data)
+        data = deepcopy(list_data)
         detail_avatars = _extract_mys_detail_avatars(detail_data)
         if detail_avatars:
             data["avatars"] = detail_avatars
@@ -1357,7 +1368,7 @@ class MysPanelSource(BasePanelSource):
 
     async def _fetch_starrail_avatar_info(self, uid: str, cookie: str) -> PanelResult:
         base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
-        params = {"role_id": uid, "server": _starrail_server_id(uid)}
+        params = {"need_wiki": "true", "role_id": uid, "server": _starrail_server_id(uid)}
         q = _mys_query(params)
         url = urljoin(f"{base_url}/", "game_record/app/hkrpg/api/avatar/info")
         try:
