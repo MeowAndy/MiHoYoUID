@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 import httpx
+from gsuid_core.utils.api.mys import MysApi as GsCoreMysApi
 from gsuid_core.utils.api.mys_api import mys_api
 
 from .config import MiaoConfig
@@ -839,6 +840,13 @@ def _starrail_server_id(uid: str) -> str:
 
 
 MYS_API_BASE_URL = "https://api-takumi-record.mihoyo.com"
+MYS_STARRAIL_AVATAR_INFO_URL = f"{MYS_API_BASE_URL}/game_record/app/hkrpg/api/avatar/info"
+
+
+def _gscore_mys_client(game: str = "gs") -> GsCoreMysApi:
+    client = GsCoreMysApi()
+    client.is_sr = game in {"sr", "starrail", "hkrpg"}
+    return client
 
 
 def _md5(text: str) -> str:
@@ -1206,18 +1214,35 @@ class MysPanelSource(BasePanelSource):
         self.game = "sr" if game in {"sr", "starrail", "hkrpg"} else "gs"
 
     async def _fetch_with_gscore_api(self, uid: str, cookie: str) -> PanelResult:
-        index_data = await mys_api.get_info(uid, cookie)
+        gs_mys = _gscore_mys_client("gs")
+        index_raw = await gs_mys.simple_mys_req("PLAYER_INFO_URL", uid, cookie=cookie, game_name="gs")
+        if not isinstance(index_raw, dict):
+            raise PanelSourceError(self.source_name, _mys_code_message(index_raw))
+        index_data = index_raw.get("data") if isinstance(index_raw.get("data"), dict) else {}
         if not isinstance(index_data, dict):
-            raise PanelSourceError(self.source_name, _mys_code_message(index_data))
+            raise PanelSourceError(self.source_name, "米游社角色列表返回异常")
 
         avatars = index_data.get("avatars") if isinstance(index_data, dict) else []
         character_ids = [x.get("id") for x in avatars if isinstance(x, dict) and x.get("id")]
         detail_data: Dict[str, Any] = {}
+        detail_raw: Dict[str, Any] = {}
         if character_ids:
-            detail_ret = await mys_api.get_character(uid, character_ids, cookie)
-            if not isinstance(detail_ret, dict):
-                raise PanelSourceError(self.source_name, _mys_code_message(detail_ret))
-            detail_data = detail_ret
+            server = _server_id(uid)
+            detail_header = deepcopy(gs_mys._HEADER)
+            detail_header["Cookie"] = cookie
+            detail_header["DS"] = _mys_ds("", {"character_ids": character_ids, "role_id": uid, "server": server})
+            detail_raw_ret = await gs_mys._mys_request(
+                gs_mys.MAPI["PLAYER_DETAIL_INFO_URL"],
+                "POST",
+                detail_header,
+                data={"character_ids": character_ids, "role_id": uid, "server": server},
+                game_name="gs",
+                time_out=int(max(_timeout(), 30.0)),
+            )
+            if not isinstance(detail_raw_ret, dict):
+                raise PanelSourceError(self.source_name, _mys_code_message(detail_raw_ret))
+            detail_raw = detail_raw_ret
+            detail_data = detail_raw.get("data") if isinstance(detail_raw.get("data"), dict) else {}
 
         data = deepcopy(index_data)
         detail_avatars = _extract_mys_detail_avatars(detail_data)
@@ -1226,7 +1251,7 @@ class MysPanelSource(BasePanelSource):
         result = PanelResult(
             source=self.source_name,
             uid=uid,
-            raw={"index": {"retcode": 0, "data": index_data}, "detail": {"retcode": 0, "data": detail_data}},
+            raw={"index": index_raw, "detail": detail_raw},
             nickname=str((data.get("role") or {}).get("nickname") or ""),
             level=(data.get("role") or {}).get("level"),
             signature="",
@@ -1236,6 +1261,40 @@ class MysPanelSource(BasePanelSource):
         )
         if character_ids and not any(_avatar_has_mys_detail(x) for x in detail_avatars):
             raise PanelSourceError(self.source_name, "米游社角色详情缺少属性/圣遗物数据")
+        return result
+
+    async def _fetch_starrail_with_gscore_api(self, uid: str, cookie: str) -> PanelResult:
+        gs_mys = _gscore_mys_client("sr")
+        params = {"role_id": uid, "server": _starrail_server_id(uid)}
+        header = deepcopy(gs_mys._HEADER)
+        header["Cookie"] = cookie
+        header["DS"] = _mys_ds(_mys_query(params))
+        raw_ret = await gs_mys._mys_request(
+            MYS_STARRAIL_AVATAR_INFO_URL,
+            "GET",
+            header,
+            params=params,
+            game_name="sr",
+            time_out=int(max(_timeout(), 30.0)),
+        )
+        if not isinstance(raw_ret, dict):
+            raise PanelSourceError(self.source_name, _mys_code_message(raw_ret))
+        data = raw_ret.get("data") if isinstance(raw_ret.get("data"), dict) else {}
+        avatars = data.get("avatar_list") or data.get("avatars") or []
+        if not isinstance(avatars, list):
+            avatars = []
+        result = PanelResult(
+            source=self.source_name,
+            uid=uid,
+            raw=raw_ret,
+            nickname=str((data.get("role") or {}).get("nickname") or ""),
+            level=(data.get("role") or {}).get("level"),
+            signature="",
+            avatars=avatars,
+            characters=_characters_from_avatars(avatars, "sr"),
+            game="sr",
+        )
+        set_cached_panel(_cache_key(self.source_name, "sr"), uid, result)
         return result
 
     async def _fetch_with_record_api(self, uid: str, cookie: str) -> PanelResult:
@@ -1383,15 +1442,15 @@ class MysPanelSource(BasePanelSource):
         url: str,
         **kwargs: Any,
     ) -> httpx.Response:
-        last_error: httpx.ReadTimeout | None = None
+        last_error: httpx.TimeoutException | None = None
         for _ in range(2):
             try:
                 return await client.request(method, url, **kwargs)
-            except httpx.ReadTimeout as e:
+            except (httpx.ConnectTimeout, httpx.ReadTimeout) as e:
                 last_error = e
         if last_error:
             raise last_error
-        raise httpx.ReadTimeout("米游社请求读取超时")
+        raise httpx.TimeoutException("米游社请求超时")
 
     async def fetch(self, uid: str) -> PanelResult:
         cached = get_cached_panel(_cache_key(self.source_name, self.game), uid)
@@ -1406,7 +1465,12 @@ class MysPanelSource(BasePanelSource):
             raise PanelSourceError(self.source_name, "米游社 Cookie 未配置")
 
         if self.game == "sr":
-            return await self._fetch_starrail_avatar_info(uid, cookie)
+            try:
+                return await self._fetch_starrail_with_gscore_api(uid, cookie)
+            except PanelSourceError as e:
+                if "风控验证失败" in str(e):
+                    raise
+                return await self._fetch_starrail_avatar_info(uid, cookie)
 
         gscore_error: PanelSourceError | None = None
         try:
