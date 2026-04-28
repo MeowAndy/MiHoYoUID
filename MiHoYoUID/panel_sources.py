@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import random
@@ -10,7 +11,7 @@ from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urljoin
 
 import httpx
 from gsuid_core.utils.api.mys_api import mys_api
@@ -844,6 +845,16 @@ def _mys_ds(q: str = "", b: Optional[Dict[str, Any]] = None) -> str:
     return f"{t},{r},{c}"
 
 
+def _mys_query(params: Dict[str, Any], sort_keys: bool = False) -> str:
+    items = sorted(params.items(), key=lambda x: x[0]) if sort_keys else params.items()
+    return "&".join(f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in items)
+
+
+def _exception_message(exc: Exception) -> str:
+    text = str(exc).strip()
+    return text or exc.__class__.__name__
+
+
 def _mys_headers(cookie: str, q: str = "", b: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     device_id = str(MiaoConfig.get_config("MysDeviceId").data or uuid.uuid4()).lower()
     device_fp = str(MiaoConfig.get_config("MysDeviceFp").data or "").strip()
@@ -868,6 +879,23 @@ def _mys_headers(cookie: str, q: str = "", b: Optional[Dict[str, Any]] = None) -
     }
     if device_fp:
         headers["x-rpc-device_fp"] = device_fp
+    return headers
+
+
+async def _fill_gscore_device_headers(headers: Dict[str, str], uid: str, game: str = "gs") -> Dict[str, str]:
+    if headers.get("x-rpc-device_fp") and headers.get("x-rpc-device_id"):
+        return headers
+    try:
+        device_id = await mys_api.get_user_device_id(uid, game)
+        device_fp = await mys_api.get_user_fp(uid, game)
+        if device_id and not headers.get("x-rpc-device_id"):
+            headers["x-rpc-device_id"] = str(device_id)
+        if device_fp and not headers.get("x-rpc-device_fp"):
+            headers["x-rpc-device_fp"] = str(device_fp)
+    except (asyncio.TimeoutError, TimeoutError):
+        pass
+    except Exception:
+        pass
     return headers
 
 
@@ -1188,15 +1216,16 @@ class MysPanelSource(BasePanelSource):
         base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
         server = _server_id(uid)
         index_params = {"role_id": uid, "server": server}
-        index_q = urlencode(index_params)
+        index_q = _mys_query(index_params)
         index_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/index")
         try:
             async with httpx.AsyncClient(timeout=_timeout()) as client:
+                index_headers = await _fill_gscore_device_headers(_mys_headers(cookie, index_q), uid, "gs")
                 index_raw = await self._get_json_with_retry(
                     client,
                     index_url,
                     index_params,
-                    _mys_headers(cookie, index_q),
+                    index_headers,
                     index_q,
                 )
 
@@ -1207,18 +1236,19 @@ class MysPanelSource(BasePanelSource):
                 if character_ids:
                     detail_body = {"character_ids": character_ids, "role_id": uid, "server": server}
                     detail_url = urljoin(f"{base_url}/", "game_record/app/genshin/api/character/list")
+                    detail_headers = await _fill_gscore_device_headers(_mys_headers(cookie, "", detail_body), uid, "gs")
                     detail_raw = await self._post_json_with_retry(
                         client,
                         detail_url,
                         detail_body,
-                        _mys_headers(cookie, "", detail_body),
+                        detail_headers,
                     )
 
                 raw = {"index": index_raw, "detail": detail_raw}
         except httpx.HTTPStatusError as e:
             raise PanelSourceError(self.source_name, _http_error_message(self.source_name, e)) from e
         except Exception as e:
-            raise PanelSourceError(self.source_name, f"米游社请求失败：{e}") from e
+            raise PanelSourceError(self.source_name, f"米游社请求失败：{_exception_message(e)}") from e
 
         detail_data = detail_raw.get("data") if isinstance(detail_raw.get("data"), dict) else detail_raw
         data = deepcopy(index_data)
@@ -1243,15 +1273,16 @@ class MysPanelSource(BasePanelSource):
     async def _fetch_starrail_avatar_info(self, uid: str, cookie: str) -> PanelResult:
         base_url = _strip_url(MiaoConfig.get_config("MysApiBaseUrl").data) or MYS_API_BASE_URL
         params = {"role_id": uid, "server": _starrail_server_id(uid)}
-        q = urlencode(params)
+        q = _mys_query(params)
         url = urljoin(f"{base_url}/", "game_record/app/hkrpg/api/avatar/info")
         try:
             async with httpx.AsyncClient(timeout=_timeout()) as client:
-                raw = await self._get_json_with_retry(client, url, params, _mys_headers(cookie, q), q)
+                headers = await _fill_gscore_device_headers(_mys_headers(cookie, q), uid, "sr")
+                raw = await self._get_json_with_retry(client, url, params, headers, q)
         except httpx.HTTPStatusError as e:
             raise PanelSourceError(self.source_name, _http_error_message(self.source_name, e)) from e
         except Exception as e:
-            raise PanelSourceError(self.source_name, f"星铁米游社请求失败：{e}") from e
+            raise PanelSourceError(self.source_name, f"星铁米游社请求失败：{_exception_message(e)}") from e
 
         data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
         avatars = data.get("avatar_list") or data.get("avatars") or []
@@ -1283,7 +1314,8 @@ class MysPanelSource(BasePanelSource):
         resp.raise_for_status()
         raw = _as_dict(resp.json())
         if _is_mys_dead_code(raw):
-            resp = await client.get(url, params=params, headers=_add_mys_challenge_headers(headers, q))
+            retry_q = _mys_query(params, sort_keys=True)
+            resp = await client.get(url, params=params, headers=_add_mys_challenge_headers(headers, retry_q))
             resp.raise_for_status()
             raw = _as_dict(resp.json())
         _check_retcode(self.source_name, raw)
@@ -1331,7 +1363,7 @@ class MysPanelSource(BasePanelSource):
         except PanelSourceError as e:
             gscore_error = e
         except Exception as e:
-            gscore_error = PanelSourceError(self.source_name, f"米游社请求失败：{e}")
+            gscore_error = PanelSourceError(self.source_name, f"米游社请求失败：{_exception_message(e)}")
 
         try:
             result = await self._fetch_with_record_api(uid, cookie)
